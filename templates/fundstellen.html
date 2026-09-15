@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('editBtn').addEventListener('click', () => currentFsid && openModal(currentFsid));
     document.getElementById('deleteBtn').addEventListener('click', deleteRecord);
     document.getElementById('mapBtn').addEventListener('click', showOnMap);
-    document.getElementById('viewBtn').addEventListener('click', () => currentFsid && (window.location.href = `/fundstellen/view/${currentFsid}`));
+    document.getElementById('viewBtn').addEventListener('click', () => { if (currentFsid) { saveListState(); window.location.href = `/fundstellen/view/${currentFsid}`; } });
     document.getElementById('saveBtn').addEventListener('click', saveRecord);
     document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
     document.getElementById('refreshBtn').addEventListener('click', loadData);
@@ -306,6 +306,36 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filterCol').addEventListener('change', loadData);
     document.getElementById('filterMode').addEventListener('change', loadData);
 });
+
+// Persist list scroll position and selection so returning from the view page
+// keeps the user where they were instead of jumping back to the top.
+function saveListState() {
+    const container = document.querySelector('.table-responsive');
+    sessionStorage.setItem('fundstellen_list_scroll', container ? container.scrollTop : 0);
+    if (currentFsid) sessionStorage.setItem('fundstellen_list_selected', currentFsid);
+}
+
+function restoreListState() {
+    const savedScroll = sessionStorage.getItem('fundstellen_list_scroll');
+    const savedFsid = sessionStorage.getItem('fundstellen_list_selected');
+    if (savedFsid) {
+        const row = document.querySelector(`#fundstellenTable tr[data-fsid="${savedFsid}"]`);
+        if (row) {
+            row.classList.add('table-active');
+            currentFsid = parseInt(savedFsid, 10);
+            currentRowData = null;
+            document.getElementById('viewBtn').disabled = false;
+            document.getElementById('editBtn').disabled = false;
+            document.getElementById('deleteBtn').disabled = false;
+        }
+    }
+    if (savedScroll !== null) {
+        const container = document.querySelector('.table-responsive');
+        if (container) container.scrollTop = parseInt(savedScroll, 10);
+    }
+    sessionStorage.removeItem('fundstellen_list_scroll');
+    sessionStorage.removeItem('fundstellen_list_selected');
+}
 
 // Load data
 function loadData() {
@@ -320,6 +350,7 @@ function loadData() {
         .then(response => response.json())
         .then(data => {
             renderTable(data);
+            restoreListState();
             document.getElementById('loadingSpinner').style.display = 'none';
         })
         .catch(error => {

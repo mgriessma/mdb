@@ -177,12 +177,6 @@
                         </div>
                     </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-12">
-                            <label class="form-label">Minerale (separate with /)</label>
-                            <input type="text" class="form-control form-control-sm" id="modalMinerale" placeholder="e.g., Quarz / Feldspat / Glimmer">
-                        </div>
-                    </div>
 
                     <!-- Mineral Fields with Formulas -->
                     <datalist id="mineralOptions">
@@ -304,6 +298,7 @@ function loadData() {
         .then(response => response.json())
         .then(data => {
             renderTable(data);
+            restoreListState();
             document.getElementById('loadingSpinner').style.display = 'none';
         })
         .catch(error => {
@@ -438,11 +433,6 @@ function openModal(snr = null) {
                 document.getElementById('modalMineral4').value = data.mineral_4 || '';
                 document.getElementById('modalMineral4Formula').value = data.mineral_4_formula || '';
 
-                // Set combined minerals field
-                const minerals = [data.mineral_1, data.mineral_2, data.mineral_3, data.mineral_4]
-                    .filter(m => m).join(' / ');
-                document.getElementById('modalMinerale').value = minerals;
-
                 document.getElementById('modalGestein').value = data.gestein || '';
                 document.getElementById('modalBeschreibung').value = data.beschreibung || '';
                 document.getElementById('modalFundjahr').value = data.fundjahr || '';
@@ -466,7 +456,6 @@ function openModal(snr = null) {
         document.getElementById('modalMineral3Formula').value = '';
         document.getElementById('modalMineral4').value = '';
         document.getElementById('modalMineral4Formula').value = '';
-        document.getElementById('modalMinerale').value = '';
         document.getElementById('modalGestein').value = '';
         document.getElementById('modalBeschreibung').value = '';
         document.getElementById('modalFundjahr').value = '';
@@ -532,9 +521,40 @@ function deleteRecord() {
     deleteModal.show();
 }
 
+// Persist list scroll position and selection so returning from the view page
+// keeps the user where they were instead of jumping back to the top.
+function saveListState() {
+    const container = document.querySelector('.table-responsive');
+    sessionStorage.setItem('stufen_list_scroll', container ? container.scrollTop : 0);
+    if (currentSnr) sessionStorage.setItem('stufen_list_selected', currentSnr);
+}
+
+function restoreListState() {
+    const savedScroll = sessionStorage.getItem('stufen_list_scroll');
+    const savedSnr = sessionStorage.getItem('stufen_list_selected');
+    if (savedSnr) {
+        const row = document.querySelector(`#stufenTable tr[data-snr="${savedSnr}"]`);
+        if (row) {
+            row.classList.add('table-active');
+            currentSnr = parseInt(savedSnr, 10);
+            currentRowData = null;
+            document.getElementById('viewBtn').disabled = false;
+            document.getElementById('editBtn').disabled = false;
+            document.getElementById('deleteBtn').disabled = false;
+        }
+    }
+    if (savedScroll !== null) {
+        const container = document.querySelector('.table-responsive');
+        if (container) container.scrollTop = parseInt(savedScroll, 10);
+    }
+    sessionStorage.removeItem('stufen_list_scroll');
+    sessionStorage.removeItem('stufen_list_selected');
+}
+
 // View stufen function
 function viewStufen() {
     if (!currentSnr) return;
+    saveListState();
     window.location.href = `/stufen/view/${currentSnr}`;
 }
 

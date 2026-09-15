@@ -38,6 +38,9 @@
         </div>
         <div class="card-body">
             <div class="list-group list-group-flush">
+                <a href="/start" class="list-group-item list-group-item-action {% if request.path == '/start' or request.path == '/' %}active{% endif %}">
+                    <i class="bi bi-house-door me-2"></i> Startseite
+                </a>
                 <a href="/provinz" class="list-group-item list-group-item-action {% if request.path == '/provinz' %}active{% endif %}">
                     <i class="bi bi-geo-alt me-2"></i> Geologische Provinz
                 </a>

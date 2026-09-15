@@ -52,6 +52,28 @@ def allowed_file(filename):
     """Check if file has allowed extension"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def build_filter_clause(columns, filter_text, match_mode):
+    """Build a WHERE clause matching filter_text across the given column expressions.
+
+    Used by the list endpoints so that the 'All Columns' filter option actually
+    narrows the result set instead of returning everything unchanged.
+    Returns (where_fragment, params). An empty filter_text yields ('', []).
+    """
+    if not filter_text:
+        return '', []
+    if match_mode == 'startswith':
+        pattern = f"{filter_text}%"
+    elif match_mode == 'exact':
+        pattern = filter_text
+    else:  # contains
+        pattern = f"%{filter_text}%"
+    conditions = []
+    params = []
+    for col in columns:
+        conditions.append(f"CAST({col} AS TEXT) LIKE ?")
+        params.append(pattern)
+    return " WHERE (" + " OR ".join(conditions) + ")", params
+
 def add_formula_columns():
     """Add chemical formula columns to stufen table if they don't exist"""
     conn = get_db()
@@ -183,14 +205,76 @@ def api_stats():
 
         stats = {}
 
-        # Count records in each table
-        for table in ['geologischeprovinz', 'revier', 'fundstellen', 'stufen', 'images']:
+        # Count records in each table, exposing friendly aliases used by the UI
+        table_aliases = {
+            'geologischeprovinz': 'provinz_count',
+            'revier': 'revier_count',
+            'fundstellen': 'fundstellen_count',
+            'stufen': 'stufen_count',
+            'images': 'bilder_count',
+        }
+        for table, alias in table_aliases.items():
             cursor.execute(f"SELECT COUNT(*) FROM {table}")
             count = cursor.fetchone()[0]
             stats[f'{table}_count'] = count
+            stats[alias] = count
 
         conn.close()
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# --- Recent activity API ---
+@app.route('/api/recent-activity')
+def api_recent_activity():
+    """API: Most recently added records across the collection.
+
+    The tables do not carry timestamps, so 'recent' is approximated by the
+    highest primary-key values (auto-increment ids / newest snr).
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        activities = []
+
+        cursor.execute(
+            "SELECT snr, sammlungsstueck, fundstelle, art FROM stufen "
+            "ORDER BY snr DESC LIMIT 5")
+        for row in cursor.fetchall():
+            r = dict(row)
+            activities.append({
+                'type': 'Stufe',
+                'label': r.get('sammlungsstueck') or f"Stufe {r['snr']}",
+                'detail': r.get('fundstelle') or r.get('art') or '',
+                'url': f"/stufen?filter_col=snr&filter_text={r['snr']}&match_mode=exact",
+            })
+
+        cursor.execute(
+            "SELECT fsid, fundstelle, ortschaft, land FROM fundstellen "
+            "ORDER BY fsid DESC LIMIT 5")
+        for row in cursor.fetchall():
+            r = dict(row)
+            activities.append({
+                'type': 'Fundstelle',
+                'label': r.get('fundstelle') or f"Fundstelle {r['fsid']}",
+                'detail': ' '.join(x for x in [r.get('ortschaft'), r.get('land')] if x),
+                'url': f"/fundstellen?filter_col=fsid&filter_text={r['fsid']}&match_mode=exact",
+            })
+
+        cursor.execute(
+            "SELECT isnr, sammlungsstueck, photo, image_type FROM images "
+            "ORDER BY isnr DESC LIMIT 5")
+        for row in cursor.fetchall():
+            r = dict(row)
+            activities.append({
+                'type': 'Bild',
+                'label': r.get('sammlungsstueck') or r.get('photo') or f"Bild {r['isnr']}",
+                'detail': r.get('image_type') or '',
+                'url': "/bilder",
+            })
+
+        conn.close()
+        return jsonify({'activities': activities})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -294,8 +378,10 @@ def api_get_provinz():
 
         query = "SELECT * FROM geologischeprovinz"
         params = []
-
+        provinz_columns = ['gid', 'provinz', 'geologie_typ', 'gehoert_zu', 'erdalter']
         if filter_col and filter_text:
+            if filter_col not in provinz_columns:
+                return jsonify([])
             if match_mode == 'startswith':
                 query += f" WHERE {filter_col} LIKE ?"
                 params.append(f"{filter_text}%")
@@ -305,7 +391,10 @@ def api_get_provinz():
             else:  # contains
                 query += f" WHERE {filter_col} LIKE ?"
                 params.append(f"%{filter_text}%")
-
+        elif filter_text:
+            where, p = build_filter_clause(provinz_columns, filter_text, match_mode)
+            query += where
+            params.extend(p)
         query += " ORDER BY provinz"
 
         cursor.execute(query, params)
@@ -412,8 +501,12 @@ def api_get_revier():
 
         query = "SELECT * FROM revier"
         params = []
-
+        revier_columns = ['rid', 'bergbaurevier', 'rohstoffe', 'lagerstaettentyp1',
+                          'lagerstaettentyp2', 'lagerstaettentyp3', 'lagerstaettentyp4',
+                          'geologische_provinz', 'bergbauperiode', 'kommentar']
         if filter_col and filter_text:
+            if filter_col not in revier_columns:
+                return jsonify([])
             if match_mode == 'startswith':
                 query += f" WHERE {filter_col} LIKE ?"
                 params.append(f"{filter_text}%")
@@ -423,7 +516,10 @@ def api_get_revier():
             else:
                 query += f" WHERE {filter_col} LIKE ?"
                 params.append(f"%{filter_text}%")
-
+        elif filter_text:
+            where, p = build_filter_clause(revier_columns, filter_text, match_mode)
+            query += where
+            params.extend(p)
         query += " ORDER BY bergbaurevier"
 
         cursor.execute(query, params)
@@ -646,14 +742,14 @@ def api_get_fundstellen():
         """
         params = []
 
+        fundstellen_columns = {
+            'fsid': 'fs.fsid', 'fundstelle': 'fs.fundstelle',
+            'bergbaurevier': 'fs.bergbaurevier', 'ortschaft': 'fs.ortschaft',
+            'region': 'fs.region', 'land': 'fs.land',
+            'geologische_provinz': 'fs.geologische_provinz', 'typ': 'fs.typ',
+            'lat': 'fs.lat', 'lon': 'fs.lon', 'revier_name': 'r.bergbaurevier',
+        }
         if filter_col and filter_text:
-            fundstellen_columns = {
-                'fsid': 'fs.fsid', 'fundstelle': 'fs.fundstelle',
-                'bergbaurevier': 'fs.bergbaurevier', 'ortschaft': 'fs.ortschaft',
-                'region': 'fs.region', 'land': 'fs.land',
-                'geologische_provinz': 'fs.geologische_provinz', 'typ': 'fs.typ',
-                'lat': 'fs.lat', 'lon': 'fs.lon', 'revier_name': 'r.bergbaurevier',
-            }
             filter_col = fundstellen_columns.get(filter_col)
             if filter_col is None:
                 return jsonify([])
@@ -667,7 +763,11 @@ def api_get_fundstellen():
             else:
                 query += f" WHERE {filter_col} LIKE ?"
                 params.append(f"%{filter_text}%")
-
+        elif filter_text:
+            all_cols = list(fundstellen_columns.values())
+            where, p = build_filter_clause(all_cols, filter_text, match_mode)
+            query += where
+            params.extend(p)
         query += " ORDER BY fs.fundstelle"
 
         cursor.execute(query, params)
@@ -817,18 +917,18 @@ def api_get_stufen():
         """
         params = []
 
+        stufen_columns = {
+            'snr': 's.snr', 'sammlungsstueck': 's.sammlungsstueck',
+            'fundstelle': 's.fundstelle', 'art': 's.art', 'groesse': 's.groesse',
+            'mineral_1': 's.mineral_1', 'mineral_2': 's.mineral_2',
+            'mineral_3': 's.mineral_3', 'mineral_4': 's.mineral_4',
+            'mineral_1_formula': 's.mineral_1_formula', 'mineral_2_formula': 's.mineral_2_formula',
+            'mineral_3_formula': 's.mineral_3_formula', 'mineral_4_formula': 's.mineral_4_formula',
+            'gestein': 's.gestein', 'beschreibung': 's.beschreibung',
+            'fundjahr': 's.fundjahr', 'herkunft': 's.herkunft', 'im_bestand': 's.im_bestand',
+            'fundstelle_name': 'f.fundstelle',
+        }
         if filter_col and filter_text:
-            stufen_columns = {
-                'snr': 's.snr', 'sammlungsstueck': 's.sammlungsstueck',
-                'fundstelle': 's.fundstelle', 'art': 's.art', 'groesse': 's.groesse',
-                'mineral_1': 's.mineral_1', 'mineral_2': 's.mineral_2',
-                'mineral_3': 's.mineral_3', 'mineral_4': 's.mineral_4',
-                'mineral_1_formula': 's.mineral_1_formula', 'mineral_2_formula': 's.mineral_2_formula',
-                'mineral_3_formula': 's.mineral_3_formula', 'mineral_4_formula': 's.mineral_4_formula',
-                'gestein': 's.gestein', 'beschreibung': 's.beschreibung',
-                'fundjahr': 's.fundjahr', 'herkunft': 's.herkunft', 'im_bestand': 's.im_bestand',
-                'fundstelle_name': 'f.fundstelle',
-            }
             filter_col = stufen_columns.get(filter_col)
             if filter_col is None:
                 return jsonify([])
@@ -842,7 +942,11 @@ def api_get_stufen():
             else:
                 query += f" WHERE {filter_col} LIKE ?"
                 params.append(f"%{filter_text}%")
-
+        elif filter_text:
+            all_cols = list(stufen_columns.values())
+            where, p = build_filter_clause(all_cols, filter_text, match_mode)
+            query += where
+            params.extend(p)
         query += " ORDER BY s.snr"
 
         cursor.execute(query, params)
@@ -1217,17 +1321,17 @@ def api_get_bilder():
             params.append(image_type)
 
         # Add additional filters
+        if image_type == 'stufen':
+            bilder_columns = {
+                'isnr': 'i.isnr', 'snr': 'i.snr',
+                'sammlungsstueck': 's.sammlungsstueck', 'photo': 'i.photo',
+            }
+        else:  # fundstellen (default columns used when no type selected)
+            bilder_columns = {
+                'isnr': 'i.isnr', 'fundstelle_id': 'i.fundstelle_id',
+                'fundstelle': 'f.fundstelle', 'photo': 'i.photo',
+            }
         if filter_col and filter_text:
-            if image_type == 'stufen':
-                bilder_columns = {
-                    'isnr': 'i.isnr', 'snr': 'i.snr',
-                    'sammlungsstueck': 's.sammlungsstueck', 'photo': 'i.photo',
-                }
-            else:  # fundstellen
-                bilder_columns = {
-                    'isnr': 'i.isnr', 'fundstelle_id': 'i.fundstelle_id',
-                    'fundstelle': 'f.fundstelle', 'photo': 'i.photo',
-                }
             filter_col = bilder_columns.get(filter_col)
             if filter_col is None:
                 return jsonify([])
@@ -1241,7 +1345,15 @@ def api_get_bilder():
             else:
                 query += f" AND {filter_col} LIKE ?"
                 params.append(f"%{filter_text}%")
-
+        elif filter_text:
+            where, p = build_filter_clause(list(bilder_columns.values()), filter_text, match_mode)
+            # build_filter_clause returns a " WHERE ..." fragment; combine with any
+            # existing type filter using AND instead.
+            if image_type:
+                query += " AND" + where[len(" WHERE"):]
+            else:
+                query += where
+            params.extend(p)
         query += " ORDER BY i.isnr"
 
         cursor.execute(query, params)

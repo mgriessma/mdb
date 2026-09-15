@@ -180,6 +180,7 @@
 
                     <div class="mb-3">
                         <label class="form-label">Stufe (snr: Sammlungsstück) *</label>
+                        <input type="text" class="form-control form-control-sm mb-2 select-search-input" for-select="modalSnr" placeholder="Stufe suchen..." autocomplete="off">
                         <select class="form-select form-select-sm" id="modalSnr" required>
                             <option value="">-- Select Stufe --</option>
                             {% for opt in stufen_options %}
@@ -245,6 +246,7 @@
 
                     <div class="mb-3">
                         <label class="form-label">Fundstelle (fsid: Fundstelle) *</label>
+                        <input type="text" class="form-control form-control-sm mb-2 select-search-input" for-select="fundstellenModalFsid" placeholder="Fundstelle suchen..." autocomplete="off">
                         <select class="form-select form-select-sm" id="fundstellenModalFsid" required>
                             <option value="">-- Select Fundstelle --</option>
                             {% for opt in fundstellen_options %}
@@ -335,6 +337,32 @@ const stufenBildModal = new bootstrap.Modal(document.getElementById('stufenBildM
 const fundstellenBildModal = new bootstrap.Modal(document.getElementById('fundstellenBildModal'));
 const deleteBildModal = new bootstrap.Modal(document.getElementById('deleteBildModal'));
 
+// Make the Stufe/Fundstelle selects searchable: typing in the search input
+// hides options that don't match, so long lists can be narrowed quickly.
+function setupSearchableSelects() {
+    document.querySelectorAll('.select-search-input').forEach(input => {
+        if (input.dataset.bound) return;
+        input.dataset.bound = '1';
+        const select = document.getElementById(input.getAttribute('for-select'));
+        if (!select) return;
+        input.addEventListener('input', () => {
+            const term = input.value.trim().toLowerCase();
+            Array.from(select.options).forEach(opt => {
+                if (!opt.value) { opt.hidden = term.length > 0; return; }
+                opt.hidden = term.length > 0 && !opt.textContent.toLowerCase().includes(term);
+            });
+        });
+    });
+}
+
+function resetSearchableSelects() {
+    document.querySelectorAll('.select-search-input').forEach(input => {
+        input.value = '';
+        const select = document.getElementById(input.getAttribute('for-select'));
+        if (select) Array.from(select.options).forEach(opt => { opt.hidden = false; });
+    });
+}
+
 // Tab handling
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize tabs
@@ -344,6 +372,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load data for active tab
     loadData('stufen');
+
+    setupSearchableSelects();
 
     // Tab change handler
     document.querySelectorAll('#bilderTabs button').forEach(tabBtn => {
@@ -510,6 +540,7 @@ function selectRow(row, type) {
 // Open modal for add/edit
 function openStufenModal(isnr = null) {
     if (isnr) {
+        resetSearchableSelects();
         document.getElementById('stufenBildModalLabel').textContent = 'Edit Stufen Bild';
         fetch(`/api/bilder/${isnr}`)
             .then(response => response.json())
@@ -535,6 +566,7 @@ function openStufenModal(isnr = null) {
                 stufenBildModal.show();
             });
     } else {
+        resetSearchableSelects();
         document.getElementById('stufenBildModalLabel').textContent = 'Add Stufen Bild';
         document.getElementById('modalIsnr').value = '';
         document.getElementById('modalSnr').value = '';
@@ -549,6 +581,7 @@ function openStufenModal(isnr = null) {
 
 function openFundstellenModal(isnr = null) {
     if (isnr) {
+        resetSearchableSelects();
         document.getElementById('fundstellenBildModalLabel').textContent = 'Edit Fundstellen Bild';
         fetch(`/api/bilder/${isnr}`)
             .then(response => response.json())
@@ -574,6 +607,7 @@ function openFundstellenModal(isnr = null) {
                 fundstellenBildModal.show();
             });
     } else {
+        resetSearchableSelects();
         document.getElementById('fundstellenBildModalLabel').textContent = 'Add Fundstellen Bild';
         document.getElementById('fundstellenModalIsnr').value = '';
         document.getElementById('fundstellenModalFsid').value = '';
