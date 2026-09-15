@@ -1,0 +1,84 @@
+<!-- SIDEBAR: This will be included in all pages -->
+<div class="d-flex flex-column h-100">
+    <!-- Search Section -->
+    <div class="card mb-3">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-search"></i> Suche</h5>
+        </div>
+        <div class="card-body">
+            <form id="globalSearchForm" class="mb-3">
+                <div class="input-group">
+                    <input type="text" id="globalSearchInput" class="form-control form-control-sm"
+                           placeholder="Suchen in allen Tabellen...">
+                    <button class="btn btn-primary btn-sm" type="submit">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </form>
+            <div class="mb-3">
+                <label class="form-label small">Tabelle auswählen:</label>
+                <select id="searchTableSelect" class="form-select form-select-sm">
+                    <option value="provinz">Geologische Provinz</option>
+                    <option value="revier">Reviere</option>
+                    <option value="fundstellen">Fundstellen</option>
+                    <option value="stufen">Stufen</option>
+                    <option value="bilder">Bilder</option>
+                </select>
+            </div>
+            <div id="searchResultsContainer" class="mt-3" style="display: none;">
+                <h6>Suchergebnisse:</h6>
+                <div id="searchResults" class="list-group" style="max-height: 300px; overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+    <!-- Data Entry Section -->
+    <div class="card mb-3">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Dateneingabe</h5>
+        </div>
+        <div class="card-body">
+            <div class="list-group list-group-flush">
+                <a href="/provinz" class="list-group-item list-group-item-action {% if request.path == '/provinz' %}active{% endif %}">
+                    <i class="bi bi-geo-alt me-2"></i> Geologische Provinz
+                </a>
+                <a href="/revier" class="list-group-item list-group-item-action {% if request.path == '/revier' %}active{% endif %}">
+                    <i class="bi bi-hammer me-2"></i> Reviere
+                </a>
+                <a href="/fundstellen" class="list-group-item list-group-item-action {% if request.path == '/fundstellen' %}active{% endif %}">
+                    <i class="bi bi-geo me-2"></i> Fundstellen
+                </a>
+                <a href="/stufen" class="list-group-item list-group-item-action {% if request.path == '/stufen' %}active{% endif %}">
+                    <i class="bi bi-collection me-2"></i> Stufen
+                </a>
+                <a href="/bilder" class="list-group-item list-group-item-action {% if request.path == '/bilder' %}active{% endif %}">
+                    <i class="bi bi-images me-2"></i> Bilder
+                </a>
+            </div>
+        </div>
+    </div>
+    <!-- Data Output Section -->
+    <div class="card">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="bi bi-download"></i> Datenausgabe</h5>
+        </div>
+        <div class="card-body">
+            <div class="list-group list-group-flush">
+                <a href="/export/csv" class="list-group-item list-group-item-action">
+                    <i class="bi bi-file-earmark-csv me-2"></i> Export CSV
+                </a>
+                <a href="/export/pdf" class="list-group-item list-group-item-action">
+                    <i class="bi bi-file-earmark-pdf me-2"></i> Export PDFs
+                </a>
+                <a href="/export/kml" class="list-group-item list-group-item-action">
+                    <i class="bi bi-geo-alt me-2"></i> Export KML
+                </a>
+                <a href="/export/shp" class="list-group-item list-group-item-action">
+                    <i class="bi bi-pin-map me-2"></i> Export SHP
+                </a>
+                <a href="/normalize" class="list-group-item list-group-item-action {% if request.path == '/normalize' %}active{% endif %}">
+                    <i class="bi bi-arrow-clockwise me-2"></i> Normalize Fundstellen
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

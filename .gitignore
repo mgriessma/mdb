@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+02_Exports/*
+!02_Exports/.gitkeep
+.env
+.venv/
+venv/
