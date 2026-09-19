@@ -29,6 +29,7 @@ from mineral_formulas import get_formula, COMMON_MINERALS
 # ==================== CONFIGURATION ====================
 DB_PATH = "MG-Sammlung.db"  # Your existing database file
 UPLOAD_FOLDER = "static/uploads"
+EXPORT_FOLDER = "02_Exports"
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 app = Flask(__name__)
@@ -38,6 +39,7 @@ app.secret_key = 'your-secret-key-here-change-in-production'
 
 # Ensure upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
 # ==================== DATABASE HELPERS ====================
 
@@ -140,6 +142,73 @@ def add_fundstelle_id_column():
 
 # Call this once when starting the app
 add_fundstelle_id_column()
+# Call this once when starting the app
+add_fundstelle_id_column()
+
+def add_ex_sammlung_columns():
+    """Add ex_sammlung and ex_sammlung_nr columns to stufen table"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Check if columns already exist
+    cursor.execute("PRAGMA table_info(stufen)")
+    columns = [column[1] for column in cursor.fetchall()]
+
+    if 'ex_sammlung' not in columns:
+        cursor.execute("ALTER TABLE stufen ADD COLUMN ex_sammlung TEXT")
+        print("Added column: ex_sammlung")
+
+    if 'ex_sammlung_nr' not in columns:
+        cursor.execute("ALTER TABLE stufen ADD COLUMN ex_sammlung_nr TEXT")
+        print("Added column: ex_sammlung_nr")
+
+    conn.commit()
+    conn.close()
+
+# Call this once when starting the app
+add_ex_sammlung_columns()
+
+def rename_gestein_to_gestein_1():
+    """Rename gestein column to gestein_1 in stufen table"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Check if gestein exists and gestein_1 doesn't
+    cursor.execute("PRAGMA table_info(stufen)")
+    columns = [column[1] for column in cursor.fetchall()]
+
+    if 'gestein' in columns and 'gestein_1' not in columns:
+        # Rename by creating new column, copying data, dropping old
+        cursor.execute("ALTER TABLE stufen ADD COLUMN gestein_1 TEXT")
+        cursor.execute("UPDATE stufen SET gestein_1 = gestein")
+        cursor.execute("ALTER TABLE stufen DROP COLUMN gestein")
+        print("Renamed column: gestein -> gestein_1")
+
+    conn.commit()
+    conn.close()
+
+# Call this once when starting the app
+rename_gestein_to_gestein_1()
+
+def add_gestein_2_column():
+    """Add gestein_2 column to stufen table"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Check if column already exists
+    cursor.execute("PRAGMA table_info(stufen)")
+    columns = [column[1] for column in cursor.fetchall()]
+
+    if 'gestein_2' not in columns:
+        cursor.execute("ALTER TABLE stufen ADD COLUMN gestein_2 TEXT")
+        print("Added column: gestein_2")
+
+    conn.commit()
+    conn.close()
+
+# Call this once when starting the app
+add_gestein_2_column()
+
 
 def get_formulas_for_stufe(mineral_1, mineral_2, mineral_3, mineral_4):
     """Get formulas for all non-empty mineral fields using the imported get_formula function"""
@@ -219,8 +288,71 @@ def api_stats():
             stats[f'{table}_count'] = count
             stats[alias] = count
 
+
+        # Count unique minerals (from mineral_1 to mineral_4)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT mineral) FROM (
+                SELECT mineral_1 as mineral FROM stufen WHERE mineral_1 IS NOT NULL AND mineral_1 != ''
+                UNION SELECT mineral_2 as mineral FROM stufen WHERE mineral_2 IS NOT NULL AND mineral_2 != ''
+                UNION SELECT mineral_3 as mineral FROM stufen WHERE mineral_3 IS NOT NULL AND mineral_3 != ''
+                UNION SELECT mineral_4 as mineral FROM stufen WHERE mineral_4 IS NOT NULL AND mineral_4 != ''
+            )
+        """)
+        stats['unique_minerals_count'] = cursor.fetchone()[0]
+
+        # Count unique gestein (from gestein_1 and gestein_2)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT gestein) FROM (
+                SELECT gestein_1 as gestein FROM stufen WHERE gestein_1 IS NOT NULL AND gestein_1 != ''
+                UNION SELECT gestein_2 as gestein FROM stufen WHERE gestein_2 IS NOT NULL AND gestein_2 != ''
+            )
+        """)
+        stats['unique_gestein_count'] = cursor.fetchone()[0]
+
         conn.close()
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Top Minerals API ---
+@app.route('/api/top-minerals')
+def api_top_minerals():
+    """Get top 10 minerals by number of stufen"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT mineral, COUNT(*) as count FROM (
+                SELECT mineral_1 as mineral FROM stufen WHERE mineral_1 IS NOT NULL AND mineral_1 != ''
+                UNION ALL SELECT mineral_2 as mineral FROM stufen WHERE mineral_2 IS NOT NULL AND mineral_2 != ''
+                UNION ALL SELECT mineral_3 as mineral FROM stufen WHERE mineral_3 IS NOT NULL AND mineral_3 != ''
+                UNION ALL SELECT mineral_4 as mineral FROM stufen WHERE mineral_4 IS NOT NULL AND mineral_4 != ''
+            ) GROUP BY mineral ORDER BY count DESC LIMIT 10
+        """)
+        top_minerals = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'top_minerals': top_minerals})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# --- Top Fundstellen API ---
+@app.route('/api/top-fundstellen')
+def api_top_fundstellen():
+    """Get top 10 fundstellen by number of stufen"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT fundstelle, COUNT(*) as count FROM stufen 
+            WHERE fundstelle IS NOT NULL AND fundstelle != ''
+            GROUP BY fundstelle ORDER BY count DESC LIMIT 10
+        """)
+        top_fundstellen = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({'top_fundstellen': top_fundstellen})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -895,7 +1027,8 @@ def stufen_page():
                              herkunft_options=HERKUNFT_OPTIONS,
                              im_bestand_options=IM_BESTAND_OPTIONS,
                              fundstellen_options=fundstellen_options,
-                             mineral_options=mineral_options)
+                             mineral_options=mineral_options,
+                             ex_sammlung_options=EX_SAMMLUNG_OPTIONS)
     except Exception as e:
         return f"Error loading stufen page: {str(e)}", 500
 
@@ -924,7 +1057,7 @@ def api_get_stufen():
             'mineral_3': 's.mineral_3', 'mineral_4': 's.mineral_4',
             'mineral_1_formula': 's.mineral_1_formula', 'mineral_2_formula': 's.mineral_2_formula',
             'mineral_3_formula': 's.mineral_3_formula', 'mineral_4_formula': 's.mineral_4_formula',
-            'gestein': 's.gestein', 'beschreibung': 's.beschreibung',
+            'gestein_1': 's.gestein_1', 'gestein_2': 's.gestein_2', 'beschreibung': 's.beschreibung',
             'fundjahr': 's.fundjahr', 'herkunft': 's.herkunft', 'im_bestand': 's.im_bestand',
             'fundstelle_name': 'f.fundstelle',
         }
@@ -991,14 +1124,16 @@ def api_create_stufen():
         cursor.execute("""
             INSERT INTO stufen
             (fundstelle, sammlungsstueck, art, groesse, mineral_1, mineral_2, mineral_3, mineral_4,
-             gestein, beschreibung, fundjahr, herkunft, im_bestand,
+             gestein_1, gestein_2, beschreibung, fundjahr, herkunft, im_bestand,
+             ex_sammlung, ex_sammlung_nr,
              mineral_1_formula, mineral_2_formula, mineral_3_formula, mineral_4_formula)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             fundstelle, data.get('sammlungsstueck'), data.get('art'), data.get('groesse'),
             data.get('mineral_1'), data.get('mineral_2'), data.get('mineral_3'), data.get('mineral_4'),
-            data.get('gestein'), data.get('beschreibung'), data.get('fundjahr'),
+            data.get('gestein_1'), data.get('gestein_2'), data.get('beschreibung'), data.get('fundjahr'),
             data.get('herkunft'), data.get('im_bestand'),
+            data.get('ex_sammlung'), data.get('ex_sammlung_nr'),
             formulas.get('mineral_1_formula'), formulas.get('mineral_2_formula'),
             formulas.get('mineral_3_formula'), formulas.get('mineral_4_formula')
         ))
@@ -1031,15 +1166,15 @@ def api_update_stufen(snr):
         cursor.execute("""
             UPDATE stufen
             SET fundstelle = ?, sammlungsstueck = ?, art = ?, groesse = ?, mineral_1 = ?,
-                mineral_2 = ?, mineral_3 = ?, mineral_4 = ?, gestein = ?, beschreibung = ?,
-                fundjahr = ?, herkunft = ?, im_bestand = ?,
+                mineral_2 = ?, mineral_3 = ?, mineral_4 = ?, gestein_1 = ?, gestein_2 = ?, beschreibung = ?,
+                fundjahr = ?, herkunft = ?, im_bestand = ?, ex_sammlung = ?, ex_sammlung_nr = ?,
                 mineral_1_formula = ?, mineral_2_formula = ?, mineral_3_formula = ?, mineral_4_formula = ?
             WHERE snr = ?
         """, (
             fundstelle, data.get('sammlungsstueck'), data.get('art'), data.get('groesse'),
             data.get('mineral_1'), data.get('mineral_2'), data.get('mineral_3'), data.get('mineral_4'),
-            data.get('gestein'), data.get('beschreibung'), data.get('fundjahr'),
-            data.get('herkunft'), data.get('im_bestand'),
+            data.get('gestein_1'), data.get('gestein_2'), data.get('beschreibung'), data.get('fundjahr'),
+            data.get('herkunft'), data.get('im_bestand'), data.get('ex_sammlung'), data.get('ex_sammlung_nr'),
             formulas.get('mineral_1_formula'), formulas.get('mineral_2_formula'),
             formulas.get('mineral_3_formula'), formulas.get('mineral_4_formula'),
             snr
