@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Locality Details - {{ fundstelle.fundstelle }} - Mineral Collection Database{% endblock %}
+
+{% block content %}
+<div class="content-header">
+    <h2>{{ fundstelle.fundstelle }}</h2>
+    <p>Detailed view of locality and related specimens.</p>
+</div>
+
+<div class="card">
+    <h3>Locality Information</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>ID</label>
+            <p>{{ fundstelle.fsid }}</p>
+        </div>
+        <div class="form-group">
+            <label>Mining District</label>
+            <p>{{ fundstelle.bergbaurevier or '-' }}</p>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Town</label>
+            <p>{{ fundstelle.ortschaft or '-' }}</p>
+        </div>
+        <div class="form-group">
+            <label>Region</label>
+            <p>{{ fundstelle.region or '-' }}</p>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Country</label>
+            <p>{{ fundstelle.land or '-' }}</p>
+        </div>
+        <div class="form-group">
+            <label>Geological Province</label>
+            <p>{{ fundstelle.geologische_provinz or '-' }}</p>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Type</label>
+            <p>{{ fundstelle.typ or '-' }}</p>
+        </div>
+        <div class="form-group">
+            <label>Coordinates</label>
+            <p>
+                {% if fundstelle.lat and fundstelle.lon %}
+                Latitude: {{ fundstelle.lat }}, Longitude: {{ fundstelle.lon }}
+                {% else %}
+                -
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Comment</label>
+        <p>{{ fundstelle.kommentar or '-' }}</p>
+    </div>
+    
+    <div style="margin-top: 1.5rem;">
+        <a href="/fundstellen" class="btn btn-secondary">Back to List</a>
+        <button class="btn btn-success" onclick="openEditModal({{ fundstelle.fsid }})">Edit Locality</button>
+    </div>
+</div>
+
+{% if images %}
+<div class="card">
+    <h3>Images ({{ images|length }})</h3>
+    <div class="image-gallery">
+        {% for image in images %}
+        <div style="text-align: center;">
+            <img src="/bilder/{{ image.photo }}" alt="{{ image.photo }}" class="image-thumbnail" onclick="openImageModal('{{ image.photo }}')">
+            <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #666;">{{ image.photo }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Specimens from this Locality ({{ stufen|length }})</h3>
+    
+    {% if stufen %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Collection Piece</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Minerals</th>
+                    <th>Year</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stufe in stufen %}
+                <tr>
+                    <td>{{ stufe.snr }}</td>
+                    <td>{{ stufe.sammlungsstueck or '-' }}</td>
+                    <td>{{ stufe.art or '-' }}</td>
+                    <td>{{ stufe.groesse or '-' }}</td>
+                    <td>
+                        {{ stufe.mineral_1 or '-' }}
+                        {% if stufe.mineral_2 %}, {{ stufe.mineral_2 }}{% endif %}
+                        {% if stufe.mineral_3 %}, {{ stufe.mineral_3 }}{% endif %}
+                        {% if stufe.mineral_4 %}, {{ stufe.mineral_4 }}{% endif %}
+                    </td>
+                    <td>{{ stufe.fundjahr or '-' }}</td>
+                    <td>
+                        <a href="/view_stufen/{{ stufe.snr }}" class="btn btn-sm">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="text-align: center; color: #666; padding: 1rem;">No specimens found from this locality.</p>
+    {% endif %}
+</div>
+
+<!-- Image Modal -->
+<div class="modal" id="image-modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3 id="image-modal-title">Image</h3>
+            <button class="modal-close" onclick="closeModal('image-modal')">&times;</button>
+        </div>
+        <div class="modal-body" style="text-align: center;">
+            <img id="image-modal-img" src="" alt="" style="max-width: 100%; max-height: 70vh;">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('image-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Locality Modal -->
+<div class="modal" id="edit-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit Locality</h3>
+            <button class="modal-close" onclick="closeModal('edit-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-form">
+                <input type="hidden" id="edit-fsid" value="{{ fundstelle.fsid }}">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Locality Name *</label>
+                        <input type="text" id="edit-fundstelle" value="{{ fundstelle.fundstelle or '' }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mining District</label>
+                        <input type="text" id="edit-bergbaurevier" value="{{ fundstelle.bergbaurevier or '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Town</label>
+                        <input type="text" id="edit-ortschaft" value="{{ fundstelle.ortschaft or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Region</label>
+                        <input type="text" id="edit-region" value="{{ fundstelle.region or '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Country</label>
+                        <input type="text" id="edit-land" value="{{ fundstelle.land or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Geological Province</label>
+                        <input type="text" id="edit-geologische-provinz" value="{{ fundstelle.geologische_provinz or '' }}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="edit-typ">
+                            <option value="">-- Select --</option>
+                            <option value="Aufschluss" {% if fundstelle.typ == 'Aufschluss' %}selected{% endif %}>Aufschluss</option>
+                            <option value="Steinbruch" {% if fundstelle.typ == 'Steinbruch' %}selected{% endif %}>Steinbruch</option>
+                            <option value="Tagebau" {% if fundstelle.typ == 'Tagebau' %}selected{% endif %}>Tagebau</option>
+                            <option value="Untertage" {% if fundstelle.typ == 'Untertage' %}selected{% endif %}>Untertage</option>
+                            <option value="Lesestein" {% if fundstelle.typ == 'Lesestein' %}selected{% endif %}>Lesestein</option>
+                            <option value="Halde" {% if fundstelle.typ == 'Halde' %}selected{% endif %}>Halde</option>
+                            <option value="Seife" {% if fundstelle.typ == 'Seife' %}selected{% endif %}>Seife</option>
+                            <option value="Unbekannt" {% if fundstelle.typ == 'Unbekannt' %}selected{% endif %}>Unbekannt</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Latitude</label>
+                        <input type="text" id="edit-lat" value="{{ fundstelle.lat or '' }}" placeholder="e.g., 50.1234">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Longitude</label>
+                    <input type="text" id="edit-lon" value="{{ fundstelle.lon or '' }}" placeholder="e.g., 12.3456">
+                </div>
+                <div class="form-group">
+                    <label>Comment</label>
+                    <textarea id="edit-kommentar">{{ fundstelle.kommentar or '' }}</textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="updateFundstelle()">Update</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openImageModal(photo) {
+        document.getElementById('image-modal-title').textContent = photo;
+        document.getElementById('image-modal-img').src = `/bilder/${photo}`;
+        openModal('image-modal');
+    }
+    
+    function openEditModal(fsid) {
+        // Already populated from template
+        openModal('edit-modal');
+    }
+    
+    function updateFundstelle() {
+        const fsid = document.getElementById('edit-fsid').value;
+        const data = {
+            fundstelle: document.getElementById('edit-fundstelle').value,
+            bergbaurevier: document.getElementById('edit-bergbaurevier').value,
+            ortschaft: document.getElementById('edit-ortschaft').value,
+            region: document.getElementById('edit-region').value,
+            land: document.getElementById('edit-land').value,
+            geologische_provinz: document.getElementById('edit-geologische-provinz').value,
+            typ: document.getElementById('edit-typ').value,
+            lat: parseFloat(document.getElementById('edit-lat').value) || null,
+            lon: parseFloat(document.getElementById('edit-lon').value) || null,
+            kommentar: document.getElementById('edit-kommentar').value
+        };
+        
+        fetch(`/api/fundstellen/${fsid}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            showAlert('Locality updated successfully!', 'success');
+            closeModal('edit-modal');
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error updating locality:', error);
+            showAlert('Error updating locality', 'error');
+        });
+    }
+</script>
+{% endblock %}
