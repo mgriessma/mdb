@@ -1,0 +1,698 @@
+{% extends "base.html" %}
+
+{% block title %}Stufen{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+    <div>
+        <button class="btn btn-success btn-sm" id="addBtn">
+            <i class="bi bi-plus-circle"></i> Add Stufe
+        </button>
+        <button class="btn btn-warning btn-sm ms-2" id="updateFormulasBtn">
+            <i class="bi bi-arrow-clockwise"></i> Update All Formulas
+        </button>
+    </div>
+    
+    <div>
+    	<button class="btn btn-primary btn-sm action-btn" id="viewBtn" disabled>
+        	<i class="bi bi-eye"></i> Anschauen
+    	</button>
+    	<button class="btn btn-info btn-sm action-btn" id="editBtn" disabled>
+        	<i class="bi bi-pencil"></i> Edit
+    	</button>
+    	<button class="btn btn-danger btn-sm action-btn" id="deleteBtn" disabled>
+        	<i class="bi bi-trash"></i> Delete
+    	</button>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label small">Filter Column</label>
+            <select id="filterCol" class="form-select form-select-sm">
+                <option value="">All Columns</option>
+                <option value="snr">snr</option>
+                <option value="sammlungsstueck">Sammlungsstück</option>
+                <option value="fundstelle">Fundstelle</option>
+                <option value="art">Art</option>
+                <option value="groesse">Größe</option>
+                <option value="mineral_1">Mineral 1</option>
+                <option value="mineral_2">Mineral 2</option>
+                <option value="mineral_3">Mineral 3</option>
+                <option value="mineral_4">Mineral 4</option>
+                <option value="gestein_1">Gestein 1</option>
+                <option value="gestein_2">Gestein 2</option>
+                <option value="ex_sammlung">Ex-Sammlung</option>
+                <option value="ex_sammlung_nr">Ex-Sammlung Nr</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Match Mode</label>
+            <select id="filterMode" class="form-select form-select-sm">
+                <option value="contains">Contains</option>
+                <option value="startswith">Starts With</option>
+                <option value="exact">Exact</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small">Filter Text</label>
+            <input type="text" id="filterText" class="form-control form-control-sm" placeholder="Type to filter...">
+        </div>
+        <div class="col-md-3">
+            <button id="refreshBtn" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover data-table">
+        <thead class="table-light">
+            <tr>
+                <th>snr</th>
+                <th>Sammlungsstück</th>
+                <th>Fundstelle</th>
+                <th>Art</th>
+                <th>Minerale</th>
+                <th>Formeln</th>
+                <th>Gestein 1</th>
+                <th>Gestein 2</th>
+                <th>Ex-Sammlung</th>
+                <th>Ex-Sammlung Nr</th>
+                <th>Größe</th>
+            </tr>
+        </thead>
+        <tbody id="stufenTable">
+        </tbody>
+    </table>
+</div>
+
+<div id="loadingSpinner" class="text-center my-5" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+
+<!-- Update Formulas Progress Modal -->
+<div class="modal fade" id="updateProgressModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Updating Formulas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="spinner-border text-primary me-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span id="progressText">Updating formulas...</span>
+                </div>
+                <div class="progress mb-3">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 0%"></div>
+                </div>
+                <div id="progressDetails" class="small text-muted"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal fade" id="stufenModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stufenModalLabel">Stufe</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="stufenForm">
+                    <input type="hidden" id="modalSnr">
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Sammlungsstück *</label>
+                            <input type="text" class="form-control form-control-sm" id="modalSammlungsstueck" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Fundstelle *</label>
+                            <select class="form-select form-select-sm" id="modalFundstelle" required>
+                                <option value="">-- Select Fundstelle --</option>
+                                {% for fs in fundstellen_options %}
+                                <option value="{{ fs.value }}">{{ fs.display }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Art *</label>
+                            <select class="form-select form-select-sm" id="modalArt" required>
+                                <option value="">-- Select --</option>
+                                {% for opt in art_options %}
+                                <option value="{{ opt }}">{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Größe</label>
+                            <select class="form-select form-select-sm" id="modalGroesse">
+                                <option value="">-- Select --</option>
+                                {% for opt in groesse_options %}
+                                <option value="{{ opt }}">{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Im Bestand</label>
+                            <select class="form-select form-select-sm" id="modalImBestand">
+                                <option value="">-- Select --</option>
+                                {% for opt in im_bestand_options %}
+                                <option value="{{ opt }}">{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+
+                    <!-- Mineral Fields with Formulas -->
+                    <datalist id="mineralOptions">
+                        {% for m in mineral_options %}
+                        <option value="{{ m }}">
+                        {% endfor %}
+                    </datalist>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Mineral 1</label>
+                            <input type="text" class="form-control form-control-sm mb-2" id="modalMineral1" list="mineralOptions" autocomplete="off">
+                            <input type="text" class="form-control form-control-sm" id="modalMineral1Formula" placeholder="Formula" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Mineral 2</label>
+                            <input type="text" class="form-control form-control-sm mb-2" id="modalMineral2" list="mineralOptions" autocomplete="off">
+                            <input type="text" class="form-control form-control-sm" id="modalMineral2Formula" placeholder="Formula" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Mineral 3</label>
+                            <input type="text" class="form-control form-control-sm mb-2" id="modalMineral3" list="mineralOptions" autocomplete="off">
+                            <input type="text" class="form-control form-control-sm" id="modalMineral3Formula" placeholder="Formula" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Mineral 4</label>
+                            <input type="text" class="form-control form-control-sm mb-2" id="modalMineral4" list="mineralOptions" autocomplete="off">
+                            <input type="text" class="form-control form-control-sm" id="modalMineral4Formula" placeholder="Formula" readonly>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label small">Gestein 1</label>
+                                <input type="text" class="form-control form-control-sm" id="modalGestein1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label small">Gestein 2</label>
+                                <input type="text" class="form-control form-control-sm" id="modalGestein2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label small">Ex-Sammlung</label>
+                                <input type="text" class="form-control form-control-sm" id="modalExSammlung" list="exSammlungList" placeholder="P Grießmann, M Klanthe, W Favorat, or other">
+                                <datalist id="exSammlungList">
+                                    <option value="P Grießmann">
+                                    <option value="M Klanthe">
+                                    <option value="W Favorat">
+                                </datalist>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label small">Ex-Sammlung Nr</label>
+                                <input type="text" class="form-control form-control-sm" id="modalExSammlungNr" maxlength="10">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Beschreibung</label>
+                        <textarea class="form-control form-control-sm" id="modalBeschreibung" rows="2"></textarea>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Fundjahr</label>
+                            <input type="text" class="form-control form-control-sm" id="modalFundjahr" placeholder="YYYY">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Herkunft</label>
+                            <select class="form-select form-select-sm" id="modalHerkunft">
+                                <option value="">-- Select --</option>
+                                {% for opt in herkunft_options %}
+                                <option value="{{ opt }}">{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" id="saveBtn">
+                    <i class="bi bi-check-circle"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle"></i> Delete Stufe
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this Stufe?</p>
+                <p class="text-warning">
+                    <i class="bi bi-exclamation-diamond"></i> This may affect related Bilder records.
+                </p>
+                <div id="deleteRecordInfo" class="mt-3 p-3 bg-light rounded"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirmDeleteBtn">
+                    <i class="bi bi-trash"></i> Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Global variables
+let currentSnr = null;
+let currentRowData = null;
+let currentScrollPosition = 0;
+const stufenModal = new bootstrap.Modal(document.getElementById('stufenModal'));
+const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+const updateProgressModal = new bootstrap.Modal(document.getElementById('updateProgressModal'));
+
+// Load data
+function loadData() {
+    const filterCol = document.getElementById('filterCol').value;
+    const filterText = document.getElementById('filterText').value;
+    const filterMode = document.getElementById('filterMode').value;
+
+    document.getElementById('loadingSpinner').style.display = 'block';
+    document.getElementById('stufenTable').innerHTML = '';
+
+    fetch(`/api/stufen?filter_col=${filterCol}&filter_text=${encodeURIComponent(filterText)}&match_mode=${filterMode}`)
+        .then(response => response.json())
+        .then(data => {
+            renderTable(data);
+            restoreListState();
+            document.getElementById('loadingSpinner').style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('loadingSpinner').style.display = 'none';
+        });
+}
+
+// Render table with formulas
+function renderTable(data) {
+    const tbody = document.getElementById('stufenTable');
+    tbody.innerHTML = '';
+
+    if (data.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan="8" class="text-center text-muted">No records found</td>';
+        tbody.appendChild(tr);
+        return;
+    currentSnr = null;
+    currentRowData = null;
+    document.getElementById('viewBtn').disabled = true;  // NEW
+    document.getElementById('editBtn').disabled = true;
+    document.getElementById('deleteBtn').disabled = true;
+}
+
+    data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.dataset.snr = row.snr;
+
+        // Combine minerals for display
+        const minerals = [
+            row.mineral_1, row.mineral_2, row.mineral_3, row.mineral_4
+        ].filter(m => m).join(' / ');
+
+        // Combine formulas for display
+        const formulas = [
+            row.mineral_1_formula, row.mineral_2_formula,
+            row.mineral_3_formula, row.mineral_4_formula
+        ].filter(f => f).join(' / ');
+
+        tr.innerHTML = `
+            <td>${row.snr}</td>
+            <td>${escapeHtml(row.sammlungsstueck || '')}</td>
+            <td>${escapeHtml(row.fundstelle_name || row.fundstelle || '')}</td>
+            <td>${escapeHtml(row.art || '')}</td>
+            <td>${escapeHtml(minerals || '')}</td>
+            <td>${escapeHtml(formulas || '')}</td>
+            <td>${escapeHtml(row.gestein_1 || '')}</td>
+            <td>${escapeHtml(row.gestein_2 || '')}</td>
+            <td>${escapeHtml(row.ex_sammlung || '')}</td>
+            <td>${escapeHtml(row.ex_sammlung_nr || '')}</td>
+            <td>${escapeHtml(row.groesse || '')}</td>
+        `;
+
+        tr.addEventListener('click', () => {
+            // Store scroll position
+            currentScrollPosition = window.scrollY || document.documentElement.scrollTop;
+            selectRow(row);
+        });
+        tbody.appendChild(tr);
+    });
+
+    currentSnr = null;
+    currentRowData = null;
+    document.getElementById('editBtn').disabled = true;
+    document.getElementById('deleteBtn').disabled = true;
+}
+
+// Select row
+function selectRow(row) {
+    document.querySelectorAll('#stufenTable tr').forEach(tr => {
+        tr.classList.remove('table-active');
+    });
+
+    const tr = document.querySelector(`#stufenTable tr[data-snr="${row.snr}"]`);
+    if (tr) tr.classList.add('table-active');
+
+    currentSnr = row.snr;
+    currentRowData = row;
+    document.getElementById('editBtn').disabled = false;
+    document.getElementById('deleteBtn').disabled = false;
+}
+
+function selectRow(row) {
+    document.querySelectorAll('#stufenTable tr').forEach(tr => {
+        tr.classList.remove('table-active');
+    });
+
+    const tr = document.querySelector(`#stufenTable tr[data-snr="${row.snr}"]`);
+    if (tr) tr.classList.add('table-active');
+
+    currentSnr = row.snr;
+    currentRowData = row;
+    document.getElementById('viewBtn').disabled = false;  // NEW
+    document.getElementById('editBtn').disabled = false;
+    document.getElementById('deleteBtn').disabled = false;
+}
+
+// Open modal
+function openModal(snr = null) {
+    if (snr) {
+        document.getElementById('stufenModalLabel').textContent = 'Edit Stufe';
+
+        fetch(`/api/stufen/${snr}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('modalSnr').value = data.snr;
+
+                // Set fundstelle
+                const fundstelleSelect = document.getElementById('modalFundstelle');
+                let found = false;
+                for (let i = 0; i < fundstelleSelect.options.length; i++) {
+                    if (fundstelleSelect.options[i].value === data.fundstelle) {
+                        fundstelleSelect.selectedIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found && data.fundstelle) {
+                    const option = document.createElement('option');
+                    option.value = data.fundstelle;
+                    option.textContent = data.fundstelle;
+                    fundstelleSelect.appendChild(option);
+                    fundstelleSelect.selectedIndex = fundstelleSelect.options.length - 1;
+                }
+
+                document.getElementById('modalSammlungsstueck').value = data.sammlungsstueck || '';
+                document.getElementById('modalArt').value = data.art || '';
+                document.getElementById('modalGroesse').value = data.groesse || '';
+                document.getElementById('modalImBestand').value = data.im_bestand || '';
+
+                // Set minerals and formulas
+                document.getElementById('modalMineral1').value = data.mineral_1 || '';
+                document.getElementById('modalMineral1Formula').value = data.mineral_1_formula || '';
+                document.getElementById('modalMineral2').value = data.mineral_2 || '';
+                document.getElementById('modalMineral2Formula').value = data.mineral_2_formula || '';
+                document.getElementById('modalMineral3').value = data.mineral_3 || '';
+                document.getElementById('modalMineral3Formula').value = data.mineral_3_formula || '';
+                document.getElementById('modalMineral4').value = data.mineral_4 || '';
+                document.getElementById('modalMineral4Formula').value = data.mineral_4_formula || '';
+
+                document.getElementById('modalGestein1').value = data.gestein_1 || '';
+        document.getElementById('modalGestein2').value = data.gestein_2 || '';
+        document.getElementById('modalExSammlung').value = data.ex_sammlung || '';
+        document.getElementById('modalExSammlungNr').value = data.ex_sammlung_nr || '';
+                document.getElementById('modalBeschreibung').value = data.beschreibung || '';
+                document.getElementById('modalFundjahr').value = data.fundjahr || '';
+                document.getElementById('modalHerkunft').value = data.herkunft || '';
+
+                stufenModal.show();
+            });
+    } else {
+        document.getElementById('stufenModalLabel').textContent = 'Add Stufe';
+        document.getElementById('modalSnr').value = '';
+        document.getElementById('modalSammlungsstueck').value = '';
+        document.getElementById('modalFundstelle').value = '';
+        document.getElementById('modalArt').value = '';
+        document.getElementById('modalGroesse').value = '';
+        document.getElementById('modalImBestand').value = '';
+        document.getElementById('modalMineral1').value = '';
+        document.getElementById('modalMineral1Formula').value = '';
+        document.getElementById('modalMineral2').value = '';
+        document.getElementById('modalMineral2Formula').value = '';
+        document.getElementById('modalMineral3').value = '';
+        document.getElementById('modalMineral3Formula').value = '';
+        document.getElementById('modalMineral4').value = '';
+        document.getElementById('modalMineral4Formula').value = '';
+        document.getElementById('modalGestein1').value = '';
+        document.getElementById('modalGestein2').value = '';
+        document.getElementById('modalExSammlung').value = '';
+        document.getElementById('modalExSammlungNr').value = '';
+        document.getElementById('modalBeschreibung').value = '';
+        document.getElementById('modalFundjahr').value = '';
+        document.getElementById('modalHerkunft').value = '';
+
+        stufenModal.show();
+    }
+}
+
+// Save record - formulas will be automatically added by the backend
+function saveRecord() {
+    const snr = document.getElementById('modalSnr').value;
+
+    // Get fundstelle value
+    const fundstelleSelect = document.getElementById('modalFundstelle');
+    const fundstelle = fundstelleSelect.options[fundstelleSelect.selectedIndex]?.value || '';
+
+    const data = {
+        sammlungsstueck: document.getElementById('modalSammlungsstueck').value,
+        fundstelle: fundstelle,
+        art: document.getElementById('modalArt').value,
+        groesse: document.getElementById('modalGroesse').value,
+        mineral_1: document.getElementById('modalMineral1').value || '',
+        mineral_2: document.getElementById('modalMineral2').value || '',
+        mineral_3: document.getElementById('modalMineral3').value || '',
+        mineral_4: document.getElementById('modalMineral4').value || '',
+        gestein_1: document.getElementById('modalGestein1').value,
+        gestein_2: document.getElementById('modalGestein2').value,
+        ex_sammlung: document.getElementById('modalExSammlung').value,
+        ex_sammlung_nr: document.getElementById('modalExSammlungNr').value,
+        beschreibung: document.getElementById('modalBeschreibung').value,
+        fundjahr: document.getElementById('modalFundjahr').value,
+        herkunft: document.getElementById('modalHerkunft').value,
+        im_bestand: document.getElementById('modalImBestand').value
+    };
+
+    const url = snr ? `/api/stufen/${snr}` : '/api/stufen';
+    const method = snr ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(() => {
+        stufenModal.hide();
+        restoreListState();
+        loadData();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving record.');
+    });
+}
+
+// Delete record
+function deleteRecord() {
+    if (!currentSnr) return;
+
+    document.getElementById('deleteRecordInfo').innerHTML = `
+        <div><strong>snr:</strong> ${currentRowData.snr}</div>
+        <div><strong>Sammlungsstück:</strong> ${escapeHtml(currentRowData.sammlungsstueck || '')}</div>
+        <div><strong>Fundstelle:</strong> ${escapeHtml(currentRowData.fundstelle_name || currentRowData.fundstelle || '')}</div>
+        <div><strong>Art:</strong> ${escapeHtml(currentRowData.art || '')}</div>
+    `;
+
+    deleteModal.show();
+}
+
+// Persist list scroll position and selection so returning from the view page
+// keeps the user where they were instead of jumping back to the top.
+function saveListState() {
+    const container = document.querySelector('.table-responsive');
+    sessionStorage.setItem('stufen_list_scroll', container ? container.scrollTop : 0);
+    if (currentSnr) sessionStorage.setItem('stufen_list_selected', currentSnr);
+}
+
+function restoreListState() {
+    const savedScroll = sessionStorage.getItem('stufen_list_scroll');
+    const savedSnr = sessionStorage.getItem('stufen_list_selected');
+    if (savedSnr) {
+        const row = document.querySelector(`#stufenTable tr[data-snr="${savedSnr}"]`);
+        if (row) {
+            row.classList.add('table-active');
+            currentSnr = parseInt(savedSnr, 10);
+            currentRowData = null;
+            document.getElementById('viewBtn').disabled = false;
+            document.getElementById('editBtn').disabled = false;
+            document.getElementById('deleteBtn').disabled = false;
+        }
+    }
+    if (savedScroll !== null) {
+        const container = document.querySelector('.table-responsive');
+        if (container) container.scrollTop = parseInt(savedScroll, 10);
+    }
+    sessionStorage.removeItem('stufen_list_scroll');
+    sessionStorage.removeItem('stufen_list_selected');
+}
+
+// View stufen function
+function viewStufen() {
+    if (!currentSnr) return;
+    saveListState();
+    window.location.href = `/stufen/view/${currentSnr}`;
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+    // ... existing listeners ...
+    document.getElementById('viewBtn').addEventListener('click', viewStufen);  // NEW
+    
+    // Also save state when modal is closed without saving
+    document.getElementById('stufenModal').addEventListener('hidden.bs.modal', function() {
+        restoreListState();
+    });
+});
+
+// Confirm delete
+function confirmDelete() {
+    if (!currentSnr) return;
+
+    fetch(`/api/stufen/${currentSnr}`, {method: 'DELETE'})
+        .then(() => {
+            deleteModal.hide();
+            loadData();
+            currentSnr = null;
+            currentRowData = null;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting record.');
+        });
+}
+
+// Update all formulas
+function updateAllFormulas() {
+    updateProgressModal.show();
+    document.getElementById('progressText').textContent = 'Starting update...';
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressDetails').textContent = '';
+
+    fetch('/api/stufen/update-formulas', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').textContent = 'Update completed!';
+        document.getElementById('progressDetails').textContent = `${data.updated_count} records updated with formulas.`;
+
+        // Refresh data after a short delay
+        setTimeout(() => {
+            updateProgressModal.hide();
+            loadData();
+        }, 1500);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('progressText').textContent = 'Error updating formulas';
+        document.getElementById('progressDetails').textContent = error.message;
+    });
+}
+
+// Escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+
+    document.getElementById('addBtn').addEventListener('click', () => openModal());
+    document.getElementById('editBtn').addEventListener('click', () => currentSnr && openModal(currentSnr));
+    document.getElementById('deleteBtn').addEventListener('click', deleteRecord);
+    document.getElementById('saveBtn').addEventListener('click', saveRecord);
+    document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
+    document.getElementById('updateFormulasBtn').addEventListener('click', updateAllFormulas);
+    document.getElementById('refreshBtn').addEventListener('click', loadData);
+
+    document.getElementById('filterText').addEventListener('input', loadData);
+    document.getElementById('filterCol').addEventListener('change', loadData);
+    document.getElementById('filterMode').addEventListener('change', loadData);
+});
+</script>
+{% endblock %}
