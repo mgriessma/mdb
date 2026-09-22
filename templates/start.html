@@ -297,13 +297,13 @@ function loadTopMinerals() {
         .then(data => {
             const container = document.getElementById('topMinerals');
             if (!container) return;
-            if (!data.minerals || data.minerals.length === 0) {
+            if (!data.top_minerals || data.top_minerals.length === 0) {
                 container.innerHTML = '<div class="list-group-item text-muted small">Keine Daten verfuegbar</div>';
                 return;
             }
-            container.innerHTML = data.minerals.map((m, idx) => `
+            container.innerHTML = data.top_minerals.map((m, idx) => `
                 <div class="list-group-item d-flex justify-content-between">
-                    <span>${idx + 1}. ${escapeHtml(m.name || 'Unbekannt')}</span>
+                    <span>${idx + 1}. ${escapeHtml(m.mineral || 'Unbekannt')}</span>
                     <span class="badge bg-primary">${m.count || 0}</span>
                 </div>
             `).join('');
@@ -319,13 +319,13 @@ function loadTopFundstellen() {
         .then(data => {
             const container = document.getElementById('topFundstellen');
             if (!container) return;
-            if (!data.fundstellen || data.fundstellen.length === 0) {
+            if (!data.top_fundstellen || data.top_fundstellen.length === 0) {
                 container.innerHTML = '<div class="list-group-item text-muted small">Keine Daten verfuegbar</div>';
                 return;
             }
-            container.innerHTML = data.fundstellen.map((f, idx) => `
+            container.innerHTML = data.top_fundstellen.map((f, idx) => `
                 <div class="list-group-item d-flex justify-content-between">
-                    <span>${idx + 1}. ${escapeHtml(f.name || 'Unbekannt')}</span>
+                    <span>${idx + 1}. ${escapeHtml(f.fundstelle || 'Unbekannt')}</span>
                     <span class="badge bg-primary">${f.count || 0}</span>
                 </div>
             `).join('');

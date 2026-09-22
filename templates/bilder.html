@@ -198,18 +198,19 @@
                         <label class="form-label">Photo Path *</label>
                         <div class="input-group">
                             <input type="text" class="form-control form-control-sm" id="modalPhoto">
-                            <input type="file" class="form-control form-control-sm" id="stufenFileInput" accept="image/*" multiple max="5" style="display:none;">
+                            <input type="file" class="form-control form-control-sm" id="stufenFileInput" accept="image/*" multiple style="display:none;">
                             <button class="btn btn-secondary btn-sm" type="button" id="stufenBrowseBtn">
                                 <i class="bi bi-folder-open"></i> Browse...
                             </button>
                         </div>
-                        <div class="form-text">Browse to select an image file. On save it is renamed and stored automatically.</div>
+                        <div class="form-text">Bis zu 5 Bilder gleichzeitig auswählen. Beim Speichern werden sie automatisch umbenannt und gespeichert.</div>
                     </div>
 
                     <div class="mb-3" id="stufenImagePreviewContainer" style="display: none;">
                         <label class="form-label">Image Preview</label>
                         <div class="border p-3 text-center">
                             <img id="stufenImagePreview" src="" alt="Preview" class="img-fluid" style="max-height: 300px;">
+                            <div id="stufenFileCount" class="form-text"></div>
                             <div class="mt-2">
                                 <button type="button" class="btn btn-sm btn-outline-danger" id="stufenClearPreviewBtn">
                                     <i class="bi bi-trash"></i> Clear
@@ -264,18 +265,19 @@
                         <label class="form-label">Photo Path *</label>
                         <div class="input-group">
                             <input type="text" class="form-control form-control-sm" id="fundstellenModalPhoto">
-                            <input type="file" class="form-control form-control-sm" id="fundstellenFileInput" accept="image/*" multiple max="5" style="display:none;">
+                            <input type="file" class="form-control form-control-sm" id="fundstellenFileInput" accept="image/*" multiple style="display:none;">
                             <button class="btn btn-secondary btn-sm" type="button" id="fundstellenBrowseBtn">
                                 <i class="bi bi-folder-open"></i> Browse...
                             </button>
                         </div>
-                        <div class="form-text">Browse to select an image file. On save it is renamed and stored automatically.</div>
+                        <div class="form-text">Bis zu 5 Bilder gleichzeitig auswählen. Beim Speichern werden sie automatisch umbenannt und gespeichert.</div>
                     </div>
 
                     <div class="mb-3" id="fundstellenImagePreviewContainer" style="display: none;">
                         <label class="form-label">Image Preview</label>
                         <div class="border p-3 text-center">
                             <img id="fundstellenImagePreview" src="" alt="Preview" class="img-fluid" style="max-height: 300px;">
+                            <div id="fundstellenFileCount" class="form-text"></div>
                             <div class="mt-2">
                                 <button type="button" class="btn btn-sm btn-outline-danger" id="fundstellenClearPreviewBtn">
                                     <i class="bi bi-trash"></i> Clear
@@ -413,8 +415,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('fundstellenBrowseBtn').addEventListener('click', () => document.getElementById('fundstellenFileInput').click());
     document.getElementById('stufenFileInput').addEventListener('change', function() { handleFileSelect(this, 'stufen'); });
     document.getElementById('fundstellenFileInput').addEventListener('change', function() { handleFileSelect(this, 'fundstellen'); });
-    document.getElementById('stufenClearPreviewBtn').addEventListener('click', () => hideImagePreview('stufen'));
-    document.getElementById('fundstellenClearPreviewBtn').addEventListener('click', () => hideImagePreview('fundstellen'));
+    document.getElementById('stufenClearPreviewBtn').addEventListener('click', function() {
+        selectedFiles.stufen = null;
+        document.getElementById('stufenFileInput').value = '';
+        document.getElementById('modalPhoto').value = '';
+        const stCountClear = document.getElementById('stufenFileCount');
+        if (stCountClear) stCountClear.textContent = '';
+        hideImagePreview('stufen');
+    });
+    document.getElementById('fundstellenClearPreviewBtn').addEventListener('click', function() {
+        selectedFiles.fundstellen = null;
+        document.getElementById('fundstellenFileInput').value = '';
+        document.getElementById('fundstellenModalPhoto').value = '';
+        const fsCountClear = document.getElementById('fundstellenFileCount');
+        if (fsCountClear) fsCountClear.textContent = '';
+        hideImagePreview('fundstellen');
+    });
 
     // Update sammlungsstueck when snr changes
     document.getElementById('modalSnr').addEventListener('change', function() {
@@ -555,6 +571,8 @@ function openStufenModal(isnr = null) {
                 document.getElementById('modalPhoto').value = data.photo || '';
                 selectedFiles.stufen = null;
                 document.getElementById('stufenFileInput').value = '';
+                const stCountEdit = document.getElementById('stufenFileCount');
+                if (stCountEdit) stCountEdit.textContent = '';
 
                 // Show preview if photo exists
                 if (data.photo) {
@@ -574,6 +592,8 @@ function openStufenModal(isnr = null) {
         document.getElementById('modalPhoto').value = '';
         selectedFiles.stufen = null;
         document.getElementById('stufenFileInput').value = '';
+        const stCount = document.getElementById('stufenFileCount');
+        if (stCount) stCount.textContent = '';
         hideImagePreview('stufen');
         stufenBildModal.show();
     }
@@ -596,6 +616,8 @@ function openFundstellenModal(isnr = null) {
                 document.getElementById('fundstellenModalPhoto').value = data.photo || '';
                 selectedFiles.fundstellen = null;
                 document.getElementById('fundstellenFileInput').value = '';
+                const fsCountEdit = document.getElementById('fundstellenFileCount');
+                if (fsCountEdit) fsCountEdit.textContent = '';
 
                 // Show preview if photo exists
                 if (data.photo) {
@@ -615,6 +637,8 @@ function openFundstellenModal(isnr = null) {
         document.getElementById('fundstellenModalPhoto').value = '';
         selectedFiles.fundstellen = null;
         document.getElementById('fundstellenFileInput').value = '';
+        const fsCount = document.getElementById('fundstellenFileCount');
+        if (fsCount) fsCount.textContent = '';
         hideImagePreview('fundstellen');
         fundstellenBildModal.show();
     }
@@ -694,19 +718,29 @@ function hideImagePreview(type) {
     document.getElementById(`${type}ImagePreview`).src = '';
 }
 
-// Handle file selection from the hidden file input
+// Handle file selection from the hidden file input (up to 5 files)
 function handleFileSelect(input, type) {
-    const files = input.files;
-    if (!files || files.length === 0) return;
-    const file = files[0];
-    if (!file) return;
-    selectedFiles[type] = file;
+    const files = Array.from(input.files || []);
+    if (files.length === 0) return;
+    if (files.length > 5) {
+        alert('Maximal 5 Dateien auf einmal hochladen. Es wurden nur die ersten 5 übernommen.');
+        files = files.slice(0, 5);
+        input.value = '';
+        const dt = new DataTransfer();
+        files.forEach(f => dt.items.add(f));
+        input.files = dt.files;
+    }
+    selectedFiles[type] = files;
     const photoField = type === 'stufen' ? document.getElementById('modalPhoto') : document.getElementById('fundstellenModalPhoto');
-    photoField.value = file.name;
-    // Show a local preview of the selected file
+    photoField.value = files.map(f => f.name).join(', ');
+    const countDiv = document.getElementById(`${type}FileCount`);
+    if (countDiv) {
+        countDiv.textContent = files.length === 1 ? '1 Datei ausgewählt' : `${files.length} Dateien ausgewählt`;
+    }
+    // Show a local preview of the first selected file
     const preview = document.getElementById(`${type}ImagePreview`);
     const container = document.getElementById(`${type}ImagePreviewContainer`);
-    preview.src = URL.createObjectURL(file);
+    preview.src = URL.createObjectURL(files[0]);
     preview.onload = function() { container.style.display = 'block'; };
     preview.onerror = function() { container.style.display = 'none'; };
 }
@@ -737,60 +771,90 @@ function saveRecord(type) {
         };
     }
 
-    const url = isnr ? `/api/bilder/${isnr}` : '/api/bilder';
-    const method = isnr ? 'PUT' : 'POST';
-
-    fetch(url, {
-        method: method,
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            alert('Error saving record: ' + (data.error || 'Unknown error'));
-            return;
-        }
-        const effectiveIsnr = isnr || data.isnr;
-        const file = selectedFiles[type];
-        if (!file || !effectiveIsnr) {
-            finishSave(type);
-            return;
-        }
-        // Upload the selected file, renaming it on the server
+    const files = selectedFiles[type];
+    const uploadOne = (recordIsnr, file) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('image_type', type);
-        formData.append('isnr', effectiveIsnr);
+        formData.append('isnr', recordIsnr);
         if (type === 'stufen') {
             formData.append('snr', snr);
         } else {
             formData.append('fsid', fsid);
         }
-        fetch('/api/bilder/upload', {method: 'POST', body: formData})
+        return fetch('/api/bilder/upload', {method: 'POST', body: formData})
             .then(r => r.json())
             .then(up => {
                 if (!up.success) {
                     alert('Bild gespeichert, aber Upload fehlgeschlagen: ' + (up.error || 'Unknown error'));
                 }
-                finishSave(type);
             })
             .catch(err => {
                 console.error('Upload error:', err);
                 alert('Bild gespeichert, aber Upload fehlgeschlagen. Siehe Konsole.');
+            });
+    };
+
+    if (files && files.length > 0) {
+        // One record per file: save each, then upload its file
+        let chain = Promise.resolve();
+        files.forEach(file => {
+            chain = chain.then(() => {
+                const recordData = Object.assign({}, data, {photo: file.name});
+                const url = isnr && files.length === 1 ? `/api/bilder/${isnr}` : '/api/bilder';
+                const method = isnr && files.length === 1 ? 'PUT' : 'POST';
+                return fetch(url, {
+                    method: method,
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(recordData)
+                })
+                .then(response => response.json())
+                .then(saved => {
+                    if (!saved.success) {
+                        alert('Error saving record: ' + (saved.error || 'Unknown error'));
+                        return null;
+                    }
+                    const effectiveIsnr = (isnr && files.length === 1) ? isnr : saved.isnr;
+                    if (!effectiveIsnr) return null;
+                    return uploadOne(effectiveIsnr, file);
+                });
+            });
+        });
+        chain.then(() => finishSave(type))
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error saving record. See console for details.');
                 finishSave(type);
             });
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error saving record. See console for details.');
-    });
+    } else {
+        const url = isnr ? `/api/bilder/${isnr}` : '/api/bilder';
+        const method = isnr ? 'PUT' : 'POST';
+        fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(saved => {
+            if (!saved.success) {
+                alert('Error saving record: ' + (saved.error || 'Unknown error'));
+                return;
+            }
+            finishSave(type);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error saving record. See console for details.');
+        });
+    }
 }
 
 function finishSave(type) {
     selectedFiles[type] = null;
     const fileInput = document.getElementById(type === 'stufen' ? 'stufenFileInput' : 'fundstellenFileInput');
     if (fileInput) fileInput.value = '';
+    const countDiv = document.getElementById(`${type}FileCount`);
+    if (countDiv) countDiv.textContent = '';
     if (type === 'stufen') {
         stufenBildModal.hide();
     } else {

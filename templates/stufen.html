@@ -317,6 +317,8 @@
 let currentSnr = null;
 let currentRowData = null;
 let currentScrollPosition = 0;
+let pendingListRestore = null;
+let savingFromModal = false;
 const stufenModal = new bootstrap.Modal(document.getElementById('stufenModal'));
 const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
 const updateProgressModal = new bootstrap.Modal(document.getElementById('updateProgressModal'));
@@ -352,13 +354,13 @@ function renderTable(data) {
         const tr = document.createElement('tr');
         tr.innerHTML = '<td colspan="8" class="text-center text-muted">No records found</td>';
         tbody.appendChild(tr);
+        currentSnr = null;
+        currentRowData = null;
+        document.getElementById('viewBtn').disabled = true;
+        document.getElementById('editBtn').disabled = true;
+        document.getElementById('deleteBtn').disabled = true;
         return;
-    currentSnr = null;
-    currentRowData = null;
-    document.getElementById('viewBtn').disabled = true;  // NEW
-    document.getElementById('editBtn').disabled = true;
-    document.getElementById('deleteBtn').disabled = true;
-}
+    }
 
     data.forEach(row => {
         const tr = document.createElement('tr');
@@ -414,20 +416,6 @@ function selectRow(row) {
 
     currentSnr = row.snr;
     currentRowData = row;
-    document.getElementById('editBtn').disabled = false;
-    document.getElementById('deleteBtn').disabled = false;
-}
-
-function selectRow(row) {
-    document.querySelectorAll('#stufenTable tr').forEach(tr => {
-        tr.classList.remove('table-active');
-    });
-
-    const tr = document.querySelector(`#stufenTable tr[data-snr="${row.snr}"]`);
-    if (tr) tr.classList.add('table-active');
-
-    currentSnr = row.snr;
-    currentRowData = row;
     document.getElementById('viewBtn').disabled = false;  // NEW
     document.getElementById('editBtn').disabled = false;
     document.getElementById('deleteBtn').disabled = false;
@@ -435,6 +423,8 @@ function selectRow(row) {
 
 // Open modal
 function openModal(snr = null) {
+    savingFromModal = false;
+    saveListState();
     if (snr) {
         document.getElementById('stufenModalLabel').textContent = 'Edit Stufe';
 
@@ -550,8 +540,8 @@ function saveRecord() {
         body: JSON.stringify(data)
     })
     .then(() => {
+        savingFromModal = true;
         stufenModal.hide();
-        restoreListState();
         loadData();
     })
     .catch(error => {
@@ -578,13 +568,25 @@ function deleteRecord() {
 // keeps the user where they were instead of jumping back to the top.
 function saveListState() {
     const container = document.querySelector('.table-responsive');
-    sessionStorage.setItem('stufen_list_scroll', container ? container.scrollTop : 0);
+    pendingListRestore = {
+        scroll: container ? container.scrollTop : 0,
+        snr: currentSnr
+    };
+    sessionStorage.setItem('stufen_list_scroll', pendingListRestore.scroll);
     if (currentSnr) sessionStorage.setItem('stufen_list_selected', currentSnr);
 }
 
 function restoreListState() {
-    const savedScroll = sessionStorage.getItem('stufen_list_scroll');
-    const savedSnr = sessionStorage.getItem('stufen_list_selected');
+    let savedScroll = null;
+    let savedSnr = null;
+    if (pendingListRestore) {
+        savedScroll = pendingListRestore.scroll;
+        savedSnr = pendingListRestore.snr;
+        pendingListRestore = null;
+    } else {
+        savedScroll = sessionStorage.getItem('stufen_list_scroll');
+        savedSnr = sessionStorage.getItem('stufen_list_selected');
+    }
     if (savedSnr) {
         const row = document.querySelector(`#stufenTable tr[data-snr="${savedSnr}"]`);
         if (row) {
@@ -596,9 +598,9 @@ function restoreListState() {
             document.getElementById('deleteBtn').disabled = false;
         }
     }
-    if (savedScroll !== null) {
+    if (savedScroll !== null && savedScroll !== undefined) {
         const container = document.querySelector('.table-responsive');
-        if (container) container.scrollTop = parseInt(savedScroll, 10);
+        if (container) container.scrollTop = parseInt(savedScroll, 10) || 0;
     }
     sessionStorage.removeItem('stufen_list_scroll');
     sessionStorage.removeItem('stufen_list_selected');
@@ -616,10 +618,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadData();
     // ... existing listeners ...
     document.getElementById('viewBtn').addEventListener('click', viewStufen);  // NEW
-    
-    // Also save state when modal is closed without saving
+
     document.getElementById('stufenModal').addEventListener('hidden.bs.modal', function() {
-        restoreListState();
+        if (!savingFromModal) {
+            pendingListRestore = null;
+            sessionStorage.removeItem('stufen_list_scroll');
+            sessionStorage.removeItem('stufen_list_selected');
+        }
+        savingFromModal = false;
     });
 });
 

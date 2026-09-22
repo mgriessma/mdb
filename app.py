@@ -1576,36 +1576,30 @@ def api_delete_bilder(isnr):
 
 @app.route('/api/bilder/upload', methods=['POST'])
 def api_upload_bilder():
-    """API: Upload an image, rename it, and store it in the correct folder.
+    """API: Upload up to 5 images, rename them, and store them in the correct folder.
     Stufen rename: isnr-snr-fundstelle-mineral_1-gestein.<ext>
     Fundstellen rename: isnr-fsid-ortschaft-fundstelle.<ext>
     Updates images.photo for the given isnr."""
     try:
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': 'Keine Datei hochgeladen'}), 400
-        
-        # Get all files (handle both single and multiple)
-        files = request.files.getlist('file')
-        if not files or (len(files) == 1 and files[0].filename == ''):
-            return jsonify({'success': False, 'error': 'Keine Datei ausgewhlt'}), 400
-        
-        # Limit to 5 files
+
+        files = [f for f in request.files.getlist('file') if f and f.filename != '']
+        if not files:
+            return jsonify({'success': False, 'error': 'Keine Datei ausgewählt'}), 400
+
         if len(files) > 5:
             return jsonify({'success': False, 'error': 'Maximal 5 Dateien auf einmal hochladen'}), 400
-        
+
         isnr = request.form.get('isnr')
         image_type = request.form.get('image_type', 'stufen')
-        
-        for file in files:
-            if not file or file.filename == '':
-                continue
-            if not allowed_file(file.filename):
-                return jsonify({'success': False, 'error': f'Dateityp nicht erlaubt: {file.filename}'}), 400
-            
-            ext = file.filename.rsplit('.', 1)[1].lower()
 
         if not isnr:
             return jsonify({'success': False, 'error': 'isnr fehlt'}), 400
+
+        for file in files:
+            if not allowed_file(file.filename):
+                return jsonify({'success': False, 'error': f'Dateityp nicht erlaubt: {file.filename}'}), 400
 
         conn = get_db()
         cursor = conn.cursor()
@@ -1649,22 +1643,29 @@ def api_upload_bilder():
 
         parts = [p for p in parts if p]
         base = '-'.join(parts) if parts else slug(isnr)
-        new_filename = f"{base}.{ext}"
-        dest_path = os.path.join(folder, new_filename)
-        # Avoid collisions
-        if os.path.exists(dest_path):
-            i = 1
-            while os.path.exists(os.path.join(folder, f"{base}_{i}.{ext}")):
-                i += 1
-            new_filename = f"{base}_{i}.{ext}"
-            dest_path = os.path.join(folder, new_filename)
 
-        file.save(dest_path)
+        uploaded = []
+        try:
+            for file in files:
+                ext = file.filename.rsplit('.', 1)[1].lower()
+                new_filename = f"{base}.{ext}"
+                dest_path = os.path.join(folder, new_filename)
+                # Avoid collisions
+                if os.path.exists(dest_path):
+                    i = 1
+                    while os.path.exists(os.path.join(folder, f"{base}_{i}.{ext}")):
+                        i += 1
+                    new_filename = f"{base}_{i}.{ext}"
+                    dest_path = os.path.join(folder, new_filename)
 
-        cursor.execute("UPDATE images SET photo = ? WHERE isnr = ?", (new_filename, isnr))
-        conn.commit()
-        conn.close()
-        return jsonify({'success': True, 'photo': new_filename})
+                file.save(dest_path)
+                cursor.execute("UPDATE images SET photo = ? WHERE isnr = ?", (new_filename, isnr))
+                uploaded.append(new_filename)
+            conn.commit()
+        finally:
+            conn.close()
+
+        return jsonify({'success': True, 'photos': uploaded, 'photo': uploaded[-1] if uploaded else None})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
