@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated exports
+02_Exports/*
+!02_Exports/.gitkeep
+
+# Uploaded images (kept in place by the app)
+static/uploads/
+01_Bilder/
