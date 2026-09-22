@@ -60,8 +60,14 @@
                         <dd class="col-sm-8">{{ stufen.fundjahr or '-' }}</dd>
                         <dt class="col-sm-4">Herkunft:</dt>
                         <dd class="col-sm-8">{{ stufen.herkunft or '-' }}</dd>
-                        <dt class="col-sm-4">Gestein:</dt>
-                        <dd class="col-sm-8">{{ stufen.gestein or '-' }}</dd>
+                        {% if stufen.gestein_1 %}
+                        <dt class="col-sm-4">Gestein 1:</dt>
+                        <dd class="col-sm-8">{{ stufen.gestein_1 }}</dd>
+                        {% endif %}
+                        {% if stufen.gestein_2 %}
+                        <dt class="col-sm-4">Gestein 2:</dt>
+                        <dd class="col-sm-8">{{ stufen.gestein_2 }}</dd>
+                        {% endif %}
                         <dt class="col-sm-4">Beschreibung:</dt>
                         <dd class="col-sm-8">{{ stufen.beschreibung or '-' }}</dd>
                         <dt class="col-sm-4">Fundstelle:</dt>
