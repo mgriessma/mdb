@@ -24,7 +24,10 @@ bot-clearance is stored in cookies, so the browser session (including
 cookies) is KEPT between reports by default -- clearing cookies forces a
 new bot challenge on every report and causes 'Request unsuccessful'
 block pages. If a block page still appears, the script waits out a
-cooldown before retrying instead of hammering the site.
+cooldown before retrying instead of hammering the site. Because a block
+is session-wide, the script pauses for a longer --block-pause after a
+blocked failure and ABORTS the run after --max-consecutive-blocks blocked
+reports in a row (re-run later; completed reports are skipped).
 
 Resumable: a report folder containing a .complete marker is skipped.
 Failures are collected in <out>/_failed.txt so you can re-run just those.
@@ -52,7 +55,7 @@ import time
 import traceback
 from pathlib import Path
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 BASE_URL = "https://wamex.dmp.wa.gov.au/Wamex/Search/ReportDetails?ANumber={}"
 WAMEX_HOME = "https://wamex.dmp.wa.gov.au/Wamex/"
@@ -428,7 +431,7 @@ def wait_for_downloads(download_dir: Path, before: set[str], timeout: int) -> li
 def download_report(driver, download_dir: Path, anumber: int, target_dir: Path,
                     verbose: bool, download_timeout: int, page_timeout: float,
                     retries: int, block_cooldown: float = 120.0,
-                    max_block_retries: int = 3) -> tuple[int, str]:
+                    max_block_retries: int = 3) -> tuple[int, str, bool]:
     url = report_url(anumber)
     elements = []
     blocked = False
@@ -458,7 +461,7 @@ def download_report(driver, download_dir: Path, anumber: int, target_dir: Path,
             elements = wait_for_download_elements(driver, page_timeout)
         except Exception as exc:
             dump_debug(driver, target_dir)
-            return 0, f"error while loading {url}: {exc!r}"
+            return 0, f"error while loading {url}: {exc!r}", False
         if elements:
             break
         if verbose:
@@ -474,13 +477,13 @@ def download_report(driver, download_dir: Path, anumber: int, target_dir: Path,
                 f"{1 + max(0, retries)} attempt(s); the site is refusing automated "
                 f"access right now -- wait a while, then re-run (completed reports "
                 f"are skipped automatically). Page text: {snippet!r}"
-            )
+            ), True
         return 0, (
             f"no download links found on {url} "
             f"(browser at: {safe_current_url(driver)}; title: {title!r}; "
             f"page text: {snippet!r}; "
             f"debug_page.html/debug_screenshot.png saved in {target_dir})"
-        )
+        ), False
 
     main_window = driver.current_window_handle
     before = {p.name for p in download_dir.iterdir() if p.is_file()}
@@ -488,7 +491,7 @@ def download_report(driver, download_dir: Path, anumber: int, target_dir: Path,
     clicked = click_download_elements(driver, anumber, main_window, verbose, page_timeout)
     if clicked == 0:
         dump_debug(driver, target_dir)
-        return 0, f"found {len(elements)} candidate link(s) but none clickable on {url}"
+        return 0, f"found {len(elements)} candidate link(s) but none clickable on {url}", False
 
     files = wait_for_downloads(download_dir, before, download_timeout)
     moved = 0
@@ -503,7 +506,7 @@ def download_report(driver, download_dir: Path, anumber: int, target_dir: Path,
         moved += 1
         if verbose:
             print(f"    saved {dest}")
-    return moved, ""
+    return moved, "", False
 
 
 def main(argv=None) -> int:
@@ -530,6 +533,10 @@ def main(argv=None) -> int:
                         help="seconds to wait when the site shows a block/challenge page before retrying (default: 120)")
     parser.add_argument("--max-block-retries", type=int, default=3,
                         help="block/cooldown retries per report before giving up (default: 3)")
+    parser.add_argument("--block-pause", type=float, default=900.0,
+                        help="seconds to pause the whole run after a report failed due to a block (default: 900 = 15 min)")
+    parser.add_argument("--max-consecutive-blocks", type=int, default=3,
+                        help="abort the run after this many consecutive blocked reports (default: 3; re-run later, completed reports are skipped)")
     parser.add_argument("--dry-run", action="store_true",
                         help="create folders and write report URLs without launching a browser")
     parser.add_argument("--force", action="store_true",
@@ -579,7 +586,19 @@ def main(argv=None) -> int:
         log("starting browser...")
         driver = make_driver(args.browser, download_dir)
         log("browser started")
+        log("warming up session via WAMEX home page...")
+        try:
+            driver.get(WAMEX_HOME)
+            time.sleep(3)
+            if is_block_page(driver):
+                log("warning: WAMEX home page is already blocked; the run will likely fail until the site unblocks you")
+            else:
+                log("session warmed up")
+        except Exception as exc:
+            log(f"warning: warm-up navigation failed (continuing anyway): {exc!r}")
         ok, skipped, failed = 0, 0, []
+        consecutive_blocks = 0
+        abort_reason = None
         try:
             for i, n in enumerate(anumbers, start=1):
                 folder = out_dir / folder_name(n)
@@ -597,7 +616,7 @@ def main(argv=None) -> int:
                     except Exception:
                         pass
                 try:
-                    moved, err = download_report(
+                    moved, err, was_blocked = download_report(
                         driver, download_dir, n, folder, args.verbose,
                         args.timeout, args.page_timeout, args.retries,
                         args.block_cooldown, args.max_block_retries,
@@ -606,14 +625,32 @@ def main(argv=None) -> int:
                     raise
                 except Exception as exc:
                     dump_debug(driver, folder)
-                    moved, err = 0, f"unexpected error: {exc!r}"
+                    moved, err, was_blocked = 0, f"unexpected error: {exc!r}", False
                     log(f"    unexpected error traceback:")
                     for line in traceback.format_exc().splitlines():
                         log(f"    {line}")
                 if err:
                     log(f"    FAILED: {err}")
                     failed.append(n)
+                    if was_blocked:
+                        consecutive_blocks += 1
+                        remaining = len(anumbers) - i
+                        if consecutive_blocks >= args.max_consecutive_blocks:
+                            abort_reason = (
+                                f"aborted after {consecutive_blocks} consecutive report(s) blocked by "
+                                f"site bot protection (Incapsula); {remaining} report(s) left unprocessed. "
+                                f"The site is refusing automated access right now. Wait a while (e.g. 30-60 min), "
+                                f"then simply re-run this command -- completed reports are skipped automatically."
+                            )
+                            log(f"    {abort_reason}")
+                            break
+                        pause = args.block_pause
+                        log(f"    session is blocked; pausing the whole run for {pause:.0f}s ({pause / 60:.0f} min) before the next report")
+                        time.sleep(pause)
+                    else:
+                        consecutive_blocks = 0
                 else:
+                    consecutive_blocks = 0
                     marker.write_text(report_url(n) + "\n", encoding="utf-8")
                     log(f"    saved {moved} file(s) -> {folder}")
                     ok += 1
@@ -627,9 +664,16 @@ def main(argv=None) -> int:
             log("browser closed")
 
         failed_path = out_dir / "_failed.txt"
+        if abort_reason:
+            remaining = [n for n in anumbers
+                        if not (out_dir / folder_name(n) / COMPLETE_MARKER).exists() and n not in failed]
+            if remaining:
+                failed.extend(remaining)
         if failed:
             failed_path.write_text("\n".join(map(str, failed)) + "\n", encoding="utf-8")
             log(f"Done: {ok} succeeded, {skipped} skipped, {len(failed)} failed.")
+            if abort_reason:
+                log(abort_reason)
             log(f"Failed A numbers saved to {failed_path}; re-run the script to retry them.")
             tee.close()
             return 1
