@@ -1947,11 +1947,20 @@ def export_pdf():
                     else:
                         st_list.append(Paragraph(f"<font color='red'>{label}</font>", wrap7))
 
-                data3.append([
-                    Paragraph(mineral, wrap7),
-                    fs_links,
-                    st_list
-                ])
+                # Split long cell contents across multiple rows so that no
+                # single row can grow taller than the page frame.
+                per_row = 20
+                fs_parts = [fs_links[i:i+per_row] for i in range(0, len(fs_links), per_row)] or [[]]
+                st_parts = [st_list[i:i+per_row] for i in range(0, len(st_list), per_row)] or [[]]
+                part_count = max(len(fs_parts), len(st_parts))
+                for p in range(part_count):
+                    fs_part = fs_parts[p] if p < len(fs_parts) else []
+                    st_part = st_parts[p] if p < len(st_parts) else []
+                    data3.append([
+                        Paragraph(mineral, wrap7) if p == 0 else Paragraph("", wrap7),
+                        fs_part,
+                        st_part
+                    ])
 
             # Create table for this chunk
             t = Table(data3, repeatRows=1)
@@ -1962,7 +1971,6 @@ def export_pdf():
                 ("FONTSIZE", (0,0), (-1,-1), 5),
                 ("TOPPADDING", (0,0), (-1,-1), 1),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 1),
-                ("ROWHEIGHTS", (0,0), (-1,-1), 80),  # Limit row height
             ]))
             elements3.append(t)
             elements3.append(Spacer(1, 12))  # Add some space between tables
