@@ -79,6 +79,47 @@ def build_filter_clause(columns, filter_text, match_mode):
 _PDF_FONTS_REGISTERED = False
 
 
+_SUBSUP_DIGITS = {
+    '\u2080': ('sub', '0'), '\u2081': ('sub', '1'), '\u2082': ('sub', '2'), '\u2083': ('sub', '3'),
+    '\u2084': ('sub', '4'), '\u2085': ('sub', '5'), '\u2086': ('sub', '6'), '\u2087': ('sub', '7'),
+    '\u2088': ('sub', '8'), '\u2089': ('sub', '9'),
+    '\u2070': ('sup', '0'), '\u00b9': ('sup', '1'), '\u00b2': ('sup', '2'), '\u00b3': ('sup', '3'),
+    '\u2074': ('sup', '4'), '\u2075': ('sup', '5'), '\u2076': ('sup', '6'), '\u2077': ('sup', '7'),
+    '\u2078': ('sup', '8'), '\u2079': ('sup', '9'),
+    '\u207a': ('sup', '+'), '\u207b': ('sup', '-'),
+    '\u208a': ('sub', '+'), '\u208b': ('sub', '-'),
+}
+
+
+def pdf_markup(text):
+    """Convert Unicode sub/superscripts in chemical formulas to <sub>/<sup>.
+
+    Formulas stored in the database use Unicode subscripts (CaF\u2082) and
+    superscripts (Fe\u00b3\u207a). Fonts like reportlab's bundled Vera lack
+    these glyphs, so they render as white squares. <sub>/<sup> markup with
+    ASCII digits works with any registered font.
+    """
+    if not text:
+        return ""
+    text = str(text).replace('\n', '<br/>')
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch in _SUBSUP_DIGITS:
+            kind = _SUBSUP_DIGITS[ch][0]
+            digits = []
+            while i < n and text[i] in _SUBSUP_DIGITS and _SUBSUP_DIGITS[text[i]][0] == kind:
+                digits.append(_SUBSUP_DIGITS[text[i]][1])
+                i += 1
+            out.append(f'<{kind}>{"".join(digits)}</{kind}>')
+        else:
+            out.append(ch)
+            i += 1
+    return ''.join(out)
+
+
 def register_pdf_fonts():
     """Register Unicode-capable fonts for PDF export.
 
@@ -96,11 +137,13 @@ def register_pdf_fonts():
         "DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/dejavusans.ttf",
     ]
     bold_candidates = [
         "DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        "C:/Windows/Fonts/dejavusans-bold.ttf",
     ]
     import reportlab
     rl_fonts = os.path.join(os.path.dirname(reportlab.__file__), "fonts")
@@ -1826,7 +1869,7 @@ def export_pdf():
                 Paragraph(str(art or ""), wrap7),
                 Paragraph(str(groesse or ""), wrap7),
                 Paragraph(str(minerals or ""), wrap7),
-                Paragraph(str(formulas or ""), wrap7),
+                Paragraph(pdf_markup(formulas), wrap7),
                 Paragraph(str(beschreibung or ""), wrap7),
                 Paragraph(str(fundjahr or ""), wrap7),
                 Paragraph(str(herkunft or ""), wrap7),
@@ -1990,7 +2033,7 @@ def export_pdf():
             concatenated = " - ".join([x for x in [land, region, ortschaft, fundstelle_raw] if x])
             minerals = " / ".join([x for x in [m1, m2, m3, m4] if x])
             formulas = " / ".join([x for x in [f1, f2, f3, f4] if x])
-            data.append([Paragraph(str(snr or ""), wrap7), Paragraph(str(sammlungsstueck or ""), wrap7), Paragraph(str(concatenated or ""), wrap7), Paragraph(str(revier or ""), wrap7), Paragraph(str(art or ""), wrap7), Paragraph(str(groesse or ""), wrap7), Paragraph(str(minerals or ""), wrap7), Paragraph(str(formulas or ""), wrap7), Paragraph(str(beschreibung or ""), wrap7), Paragraph(str(fundjahr or ""), wrap7), Paragraph(str(herkunft or ""), wrap7), Paragraph(str(im_bestand or ""), wrap7)])
+            data.append([Paragraph(str(snr or ""), wrap7), Paragraph(str(sammlungsstueck or ""), wrap7), Paragraph(str(concatenated or ""), wrap7), Paragraph(str(revier or ""), wrap7), Paragraph(str(art or ""), wrap7), Paragraph(str(groesse or ""), wrap7), Paragraph(str(minerals or ""), wrap7), Paragraph(pdf_markup(formulas), wrap7), Paragraph(str(beschreibung or ""), wrap7), Paragraph(str(fundjahr or ""), wrap7), Paragraph(str(herkunft or ""), wrap7), Paragraph(str(im_bestand or ""), wrap7)])
         table = Table(data, repeatRows=1)
         table.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.lightgrey), ("GRID", (0,0), (-1,-1), 0.25, colors.black), ("VALIGN", (0,0), (-1,-1), "TOP"), ("FONTSIZE", (0,0), (-1,-1), 5), ("TOPPADDING", (0,0), (-1,-1), 1), ("BOTTOMPADDING", (0,0), (-1,-1), 1)]))
         elements4.append(table)
@@ -2313,10 +2356,10 @@ def export_stufen_pdf(snr):
         s_data.append([Paragraph("Fundstelle:", label_style), Paragraph(str(stufen.get('fundstelle', '')), normal_style)])
         s_data.append([Paragraph("Art:", label_style), Paragraph(str(stufen.get('art', '')), normal_style)])
         s_data.append([Paragraph("Groesse:", label_style), Paragraph(str(stufen.get('groesse', '')), normal_style)])
-        s_data.append([Paragraph("Mineral 1:", label_style), Paragraph(str(stufen.get('mineral_1', '')), normal_style)])
-        s_data.append([Paragraph("Mineral 2:", label_style), Paragraph(str(stufen.get('mineral_2', '')), normal_style)])
-        s_data.append([Paragraph("Mineral 3:", label_style), Paragraph(str(stufen.get('mineral_3', '')), normal_style)])
-        s_data.append([Paragraph("Mineral 4:", label_style), Paragraph(str(stufen.get('mineral_4', '')), normal_style)])
+        s_data.append([Paragraph("Mineral 1:", label_style), Paragraph(pdf_markup(stufen.get('mineral_1_formula') or stufen.get('mineral_1', '')), normal_style)])
+        s_data.append([Paragraph("Mineral 2:", label_style), Paragraph(pdf_markup(stufen.get('mineral_2_formula') or stufen.get('mineral_2', '')), normal_style)])
+        s_data.append([Paragraph("Mineral 3:", label_style), Paragraph(pdf_markup(stufen.get('mineral_3_formula') or stufen.get('mineral_3', '')), normal_style)])
+        s_data.append([Paragraph("Mineral 4:", label_style), Paragraph(pdf_markup(stufen.get('mineral_4_formula') or stufen.get('mineral_4', '')), normal_style)])
         s_data.append([Paragraph("Beschreibung:", label_style), Paragraph(str(stufen.get('beschreibung', '')), normal_style)])
         s_data.append([Paragraph("Fundjahr:", label_style), Paragraph(str(stufen.get('fundjahr', '')), normal_style)])
         s_data.append([Paragraph("Herkunft:", label_style), Paragraph(str(stufen.get('herkunft', '')), normal_style)])
@@ -2474,7 +2517,7 @@ def export_fundstellen_pdf(fsid):
                     Paragraph(str(s.get('snr', '')), normal_style),
                     Paragraph(str(s.get('sammlungsstueck', '')), normal_style),
                     Paragraph(str(s.get('art', '')), normal_style),
-                    Paragraph(str(minerals), normal_style)
+                    Paragraph(pdf_markup(minerals), normal_style)
                 ])
             st_table = Table(st_data, colWidths=[60, 150, 100, 150])
             st_table.setStyle(TableStyle([
