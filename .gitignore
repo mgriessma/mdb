@@ -1,0 +1,4 @@
+02_Exports/*
+!02_Exports/.gitkeep
+static/uploads/*
+!static/uploads/.gitkeep
