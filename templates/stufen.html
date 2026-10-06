@@ -338,6 +338,11 @@ function loadData() {
             renderTable(data);
             restoreListState();
             document.getElementById('loadingSpinner').style.display = 'none';
+            const editId = new URLSearchParams(window.location.search).get('edit');
+            if (editId) {
+                window.history.replaceState({}, '', window.location.pathname);
+                openModal(editId);
+            }
         })
         .catch(error => {
             console.error('Error:', error);

@@ -16,6 +16,9 @@
             <div class="d-flex justify-content-between align-items-center">
                 <h2 class="mb-0"><i class="bi bi-geo-alt"></i> Fundstelle Details</h2>
                 <div class="btn-group" role="group" aria-label="Fundstellen actions">
+                    <a href="/fundstellen?edit={{ fundstelle.fsid }}" class="btn btn-warning btn-sm me-2" title="Fundstelle bearbeiten">
+                        <i class="bi bi-pencil"></i> Bearbeiten
+                    </a>
                     <a href="/fundstellen/view/{{ fundstelle.fsid }}/pdf" class="btn btn-danger btn-sm me-2" title="Als PDF exportieren">
                         <i class="bi bi-file-earmark-pdf"></i> PDF
                     </a>
